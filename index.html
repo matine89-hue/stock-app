@@ -494,20 +494,46 @@ async function saveAndConnect() {
 
 // ── 거래량 순위 조회 ───────────────────────────────────
 async function fetchVolumeRanking(market) {
-  var token    = localStorage.getItem('t') || '';
-  var appkey   = localStorage.getItem('k') || '';
+  var token     = localStorage.getItem('t') || '';
+  var appkey    = localStorage.getItem('k') || '';
   var appsecret = localStorage.getItem('s') || '';
   if (!token || !appkey) return [];
   try {
     var res = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'volumeRank', market: market, token: token, appkey: appkey, appsecret: appsecret })
+      // market을 최상위 필드로 전달 (proxy가 params 안 아닌 최상위에서 읽음)
+      body: JSON.stringify({ action: 'volumeRank', market: market,
+        token: token, appkey: appkey, appsecret: appsecret })
     });
     var data = await res.json();
-    if (!data || !data.output) return [];
+    if (!data || !data.output) {
+      console.warn('[거래량순위 ' + market + '] output 없음:', JSON.stringify(data).slice(0,200));
+      return [];
+    }
     return data.output.slice(0, 10);
-  } catch(e) { return []; }
+  } catch(e) {
+    console.error('[fetchVolumeRanking 오류]', market, e.message);
+    return [];
+  }
+}
+
+// 종목코드로 현재가+재무지표 조회
+async function fetchStockDetail(stockCode, market) {
+  var token     = localStorage.getItem('t') || '';
+  var appkey    = localStorage.getItem('k') || '';
+  var appsecret = localStorage.getItem('s') || '';
+  if (!token || !stockCode) return null;
+  try {
+    var res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'inquirePrice', stockCode: stockCode,
+        market: market || 'KOSPI', token: token, appkey: appkey, appsecret: appsecret })
+    });
+    var data = await res.json();
+    return (data && data.output) ? data.output : null;
+  } catch(e) { return null; }
 }
 
 // ── 실시간 데이터 불러오기 ────────────────────────────
@@ -528,66 +554,61 @@ async function fetchLiveData() {
     var kospiRaw  = await fetchVolumeRanking('KOSPI');
     var kosdaqRaw = await fetchVolumeRanking('KOSDAQ');
 
-    // 종목코드 기준으로 매핑 — 샘플 순서에 의존하지 않음
-    function applyLiveData(rawList, stockArr) {
-      // 1) 기존 샘플 종목코드 맵 생성
+    // 종목코드 기준 매핑 함수
+    function buildStockList(rawList, sampleArr, mkt) {
       var sampleMap = {};
-      stockArr.forEach(function(s) { sampleMap[s.id] = s; });
-
-      // 2) 실제 데이터를 새 배열로 구성
-      var newArr = rawList.map(function(item) {
-        var code  = item.mksc_shrn_iscd || '';
-        var name  = item.hts_kor_isnm   || '';
-        var price = parseInt(item.stck_prpr  || 0);
+      sampleArr.forEach(function(s) { sampleMap[s.id] = s; });
+      return rawList.map(function(item) {
+        var code  = item.mksc_shrn_iscd || item.stck_shrn_iscd || '';
+        var name  = item.hts_kor_isnm || '';
+        var price = parseInt(item.stck_prpr || 0);
         var chg   = parseFloat(item.prdy_ctrt || 0);
-        var vol   = parseInt(item.acml_vol || 0).toLocaleString() + '주';
-        var w52pct = parseFloat(item.d250_hgpr_vrss_prpr_rate || 0); // 52주 대비
+        // 거래량 필드: 순위API는 acml_vol, 현재가API는 acml_vol
+        var volNum = parseInt(item.acml_vol || 0);
+        var vol   = volNum > 0 ? (volNum >= 10000 ? Math.round(volNum/10000) + '만' : volNum.toLocaleString()) + '주' : '—';
+        // 52주 고가 대비 현재가 등락률
+        var w52   = parseFloat(item.d250_hgpr_vrss_prpr_rate || item.w52_hgpr_vrss_prpr_ctrt || 0);
 
-        // 같은 종목코드가 샘플에 있으면 재무/소개 등 유지, 없으면 기본값
         var base = sampleMap[code] || {
-          sector: item.rprs_mrkt_kor_name || '기타',
-          intro: name + ' — 실시간 거래량 상위 종목입니다.',
+          sector: item.bstp_kor_isnm || item.rprs_mrkt_kor_name || '기타',
+          intro: name + ' — 실시간 거래량 상위 종목입니다. (재무정보는 종목 클릭 시 로드)',
           tags: ['거래량상위'],
           news: [],
           history: [],
-          pbr: 0, per: 0, roe: 0, debt: 0, ev: 0, div: 0,
-          foreign: '—',
+          pbr: parseFloat(item.pbr || 0),
+          per: parseFloat(item.per || 0),
+          roe: parseFloat(item.roe || 0),
+          debt: 0, ev: 0, div: parseFloat(item.stck_divi || 0),
+          foreign: '+0억',
           shortScore: 3.0, midScore: 3.0
         };
 
         return Object.assign({}, base, {
-          id: code,
-          name: name,
+          id: code, name: name,
           price: price || base.price || 0,
-          chg: chg,
-          vol: vol,
-          w52: w52pct || base.w52 || 0,
-          // intro/tags/news/sector는 샘플 종목이면 유지, 신규면 기본값
-          intro: base.intro,
-          tags: base.tags,
-          news: base.news,
-          sector: base.sector,
+          chg: chg, vol: vol,
+          w52: w52 || base.w52 || 0,
+          _market: mkt,  // 시장 구분 보존 (재무 조회 시 필요)
         });
       });
-      return newArr;
     }
 
     if (kospiRaw.length > 0) {
-      var updated = applyLiveData(kospiRaw, KOSPI_STOCKS);
+      var list = buildStockList(kospiRaw, KOSPI_STOCKS, 'KOSPI');
       KOSPI_STOCKS.length = 0;
-      updated.forEach(function(s){ KOSPI_STOCKS.push(s); });
+      list.forEach(function(s){ KOSPI_STOCKS.push(s); });
     }
     if (kosdaqRaw.length > 0) {
-      var updated2 = applyLiveData(kosdaqRaw, KOSDAQ_STOCKS);
+      var list2 = buildStockList(kosdaqRaw, KOSDAQ_STOCKS, 'KOSDAQ');
       KOSDAQ_STOCKS.length = 0;
-      updated2.forEach(function(s){ KOSDAQ_STOCKS.push(s); });
+      list2.forEach(function(s){ KOSDAQ_STOCKS.push(s); });
     }
 
-    // 캐시 초기화 (종목 바뀌었으니 AI 분석 다시 받아야 함)
+    // AI 분석 캐시 초기화
     Object.keys(aiCache).forEach(function(k){ delete aiCache[k]; });
 
     renderList();
-    setFetchStatus('var(--green)', '✓ 업데이트 완료 (' + new Date().toLocaleTimeString('ko-KR') + ')');
+    setFetchStatus('var(--green)', '✓ 업데이트 완료 (' + new Date().toLocaleTimeString('ko-KR') + ') — 종목 클릭하면 재무지표 자동 로드');
   } catch(e) {
     setFetchStatus('var(--red)', '오류: ' + e.message);
   }
@@ -1045,13 +1066,43 @@ function renderHistory(el) {
 function toggleExpand(id) {
   expandedId = expandedId === id ? null : id;
   renderList();
-  if(expandedId) {
-    setTimeout(() => {
-      const card = document.getElementById(`card-${id}`);
-      if(card) card.scrollIntoView({behavior:'smooth', block:'nearest'});
+  if (expandedId) {
+    setTimeout(function() {
+      var card = document.getElementById('card-' + id);
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       loadAiAnalysis(id);
+      loadStockDetail(id);  // 재무지표 실시간 로드
     }, 100);
   }
+}
+
+// 종목 클릭 시 재무지표 실시간 로드
+async function loadStockDetail(stockId) {
+  var all = KOSPI_STOCKS.concat(KOSDAQ_STOCKS);
+  var s = null;
+  for (var i = 0; i < all.length; i++) { if (all[i].id === stockId) { s = all[i]; break; } }
+  if (!s) return;
+
+  var detail = await fetchStockDetail(stockId, s._market || 'KOSPI');
+  if (!detail) return;
+
+  // 재무지표 업데이트
+  s.price  = parseInt(detail.stck_prpr || s.price);
+  s.chg    = parseFloat(detail.prdy_ctrt || s.chg);
+  s.pbr    = parseFloat(detail.pbr || s.pbr || 0);
+  s.per    = parseFloat(detail.per || s.per || 0);
+  s.roe    = parseFloat(detail.roe || s.roe || 0);
+  s.div    = parseFloat(detail.stck_divi || s.div || 0);
+  s.sector = detail.bstp_kor_isnm || s.sector;
+  // 외인 순매수량 (단위: 주 → 억 근사값)
+  var frgn = parseInt(detail.frgn_ntby_qty || 0);
+  s.foreign = frgn >= 0 ? '+' + Math.round(frgn * s.price / 100000000) + '억' : Math.round(frgn * s.price / 100000000) + '억';
+  // 52주 고가 대비
+  var high52 = parseInt(detail.d250_hgpr || 0);
+  if (high52 > 0 && s.price > 0) s.w52 = Math.round((s.price - high52) / high52 * 100);
+
+  // 화면 다시 그리기 (카드 열린 상태 유지)
+  renderList();
 }
 
 function switchDetailTab(e, id, idx) {
@@ -1104,22 +1155,21 @@ PBR: ${s.pbr} / PER: ${s.per||'N/A'} / ROE: ${s.roe}% / 부채비율: ${s.debt}%
 주요뉴스: ${s.news.map(n=>n.t).join(' | ')}`;
 
   try {
-    // Claude API는 브라우저 직접 호출 불가 → Vercel 프록시 경유
-    const res = await fetch(PROXY_URL, {
+    var res = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'aiAnalysis', params: { prompt: prompt } })
+      body: JSON.stringify({ action: 'aiAnalysis', prompt: prompt,
+        token: '', appkey: '', appsecret: '' })
     });
-    const data = await res.json();
-    const text = (data.content && data.content.find(function(c){ return c.type==='text'; }) || {}).text
-      || data.error
-      || '분석 결과를 불러올 수 없습니다.';
+    var data = await res.json();
+    var textBlock = data.content && data.content.find(function(c){ return c.type === 'text'; });
+    var text = (textBlock && textBlock.text) || data.error || '분석 결과를 불러올 수 없습니다.';
     aiCache[stockId] = text;
     var el2 = document.getElementById('ai-text-' + stockId);
-    if (el2) el2.innerHTML = text;
+    if (el2) el2.textContent = text;
   } catch(err) {
     var el2 = document.getElementById('ai-text-' + stockId);
-    if (el2) el2.innerHTML = '분석 오류: ' + err.message;
+    if (el2) el2.textContent = '분석 오류: ' + err.message;
   }
 }
 
