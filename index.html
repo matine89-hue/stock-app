@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>국장 스크리너</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0f14;
+  --bg2: #13161e;
+  --bg3: #1a1e28;
+  --bg4: #222636;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8eaf0;
+  --text2: #8b90a0;
+  --text3: #555a6e;
+  --blue: #4a9eff;
+  --blue-dim: rgba(74,158,255,0.12);
+  --green: #3dd68c;
+  --green-dim: rgba(61,214,140,0.12);
+  --red: #ff5c5c;
+  --red-dim: rgba(255,92,92,0.12);
+  --amber: #ffb84a;
+  --amber-dim: rgba(255,184,74,0.12);
+  --purple: #a78bfa;
+  --purple-dim: rgba(167,139,250,0.12);
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Layout */
+.app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative; }
+@media(min-width: 900px) { .app { max-width: 900px; } }
+
+/* Header */
+.header { padding: 16px 16px 0; display: flex; align-items: center; justify-content: space-between; }
+.logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+.logo span { color: var(--blue); }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.time-badge { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text2); background: var(--bg3); border: 0.5px solid var(--border2); padding: 4px 10px; border-radius: 99px; }
+.noti-btn { width: 32px; height: 32px; border-radius: 8px; background: var(--bg3); border: 0.5px solid var(--border2); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; transition: background 0.2s; }
+.noti-btn:hover { background: var(--bg4); }
+
+/* Market status bar */
+.market-bar { margin: 12px 16px 0; background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
+.market-status { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.dot-live { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.market-indices { display: flex; gap: 16px; }
+.idx { font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+.idx-name { color: var(--text3); margin-right: 4px; }
+.idx-val { color: var(--text); }
+.idx-chg.up { color: var(--red); }
+.idx-chg.dn { color: var(--blue); }
+
+/* Tabs */
+.tabs-wrap { padding: 14px 16px 0; }
+.tabs { display: flex; gap: 6px; background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 4px; }
+.tab { flex: 1; text-align: center; padding: 8px 4px; font-size: 13px; font-weight: 500; border-radius: 7px; cursor: pointer; color: var(--text2); transition: all 0.2s; }
+.tab.active { background: var(--bg4); color: var(--text); border: 0.5px solid var(--border2); }
+
+/* Filter row */
+.filter-row { padding: 10px 16px; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.filter-row::-webkit-scrollbar { display: none; }
+.filter-chip { white-space: nowrap; font-size: 11px; padding: 4px 10px; border-radius: 99px; border: 0.5px solid var(--border2); background: var(--bg3); color: var(--text2); cursor: pointer; transition: all 0.2s; }
+.filter-chip.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+
+/* Stock list */
+.stock-list { padding: 0 16px; flex: 1; }
+.stock-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; cursor: pointer; transition: border-color 0.2s, transform 0.15s; }
+.stock-card:hover { border-color: var(--border2); transform: translateY(-1px); }
+.stock-card.expanded { border-color: var(--blue); }
+.stock-card-header { padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
+.rank-num { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text3); width: 16px; }
+.stock-main { flex: 1; }
+.stock-top { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.sname { font-size: 14px; font-weight: 700; }
+.scode { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text3); }
+.sector-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--bg4); color: var(--text2); border: 0.5px solid var(--border); }
+.stock-sub { font-size: 11px; color: var(--text2); }
+.stock-right { text-align: right; }
+.price-main { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.price-chg { font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+.price-chg.up { color: var(--red); }
+.price-chg.dn { color: var(--blue); }
+.score-row { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 4px; }
+.sdot { width: 7px; height: 7px; border-radius: 50%; transition: background 0.3s; }
+.sdot.fill { background: var(--blue); }
+.sdot.empty { background: var(--bg4); border: 0.5px solid var(--border2); }
+.score-num { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--blue); min-width: 22px; text-align: right; }
+
+/* Star / watchlist */
+.star-btn { font-size: 16px; cursor: pointer; opacity: 0.4; transition: opacity 0.2s; padding: 2px; }
+.star-btn.active { opacity: 1; color: var(--amber); }
+
+/* Expanded detail */
+.stock-detail { border-top: 0.5px solid var(--border); }
+.detail-tabs { display: flex; border-bottom: 0.5px solid var(--border); }
+.dtab { flex: 1; text-align: center; padding: 8px; font-size: 12px; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; }
+.dtab.active { color: var(--blue); border-bottom-color: var(--blue); }
+.detail-body { padding: 14px; }
+
+/* Company intro */
+.company-intro { background: var(--bg3); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: var(--text2); line-height: 1.7; border-left: 2px solid var(--purple); }
+.company-intro strong { color: var(--purple); font-weight: 500; }
+
+/* Metrics grid */
+.metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
+.metric-box { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; }
+.m-label { font-size: 10px; color: var(--text3); margin-bottom: 3px; }
+.m-val { font-size: 13px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.m-flag { font-size: 10px; margin-top: 1px; }
+.m-flag.good { color: var(--green); }
+.m-flag.warn { color: var(--amber); }
+.m-flag.bad { color: var(--red); }
+
+/* Risk levels */
+.risk-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.risk-box { flex: 1; background: var(--bg3); border-radius: var(--radius-sm); padding: 10px 12px; border: 0.5px solid var(--border); }
+.risk-label { font-size: 10px; color: var(--text3); margin-bottom: 6px; }
+.risk-score { display: flex; align-items: center; gap: 6px; }
+.risk-dots { display: flex; gap: 3px; }
+.rdot { width: 8px; height: 8px; border-radius: 50%; }
+.rdot.fill-short { background: var(--green); }
+.rdot.fill-mid { background: var(--amber); }
+.rdot.empty-r { background: var(--bg4); border: 0.5px solid var(--border2); }
+.risk-num { font-size: 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+
+/* AI reason */
+.ai-reason { background: var(--bg3); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: var(--text2); line-height: 1.7; position: relative; }
+.ai-label { font-size: 10px; color: var(--blue); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; font-weight: 500; }
+.ai-loading { display: flex; align-items: center; gap: 6px; color: var(--text3); font-size: 12px; }
+.spinner { width: 12px; height: 12px; border: 1.5px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Tags */
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.tag { font-size: 10px; padding: 2px 7px; border-radius: 99px; }
+.tag-blue { background: var(--blue-dim); color: var(--blue); border: 0.5px solid rgba(74,158,255,0.2); }
+.tag-green { background: var(--green-dim); color: var(--green); border: 0.5px solid rgba(61,214,140,0.2); }
+.tag-amber { background: var(--amber-dim); color: var(--amber); border: 0.5px solid rgba(255,184,74,0.2); }
+.tag-red { background: var(--red-dim); color: var(--red); border: 0.5px solid rgba(255,92,92,0.2); }
+.tag-purple { background: var(--purple-dim); color: var(--purple); border: 0.5px solid rgba(167,139,250,0.2); }
+
+/* News */
+.news-item { padding: 8px 0; border-bottom: 0.5px solid var(--border); }
+.news-item:last-child { border-bottom: none; }
+.news-title { font-size: 12px; color: var(--text); line-height: 1.5; margin-bottom: 3px; }
+.news-meta { font-size: 10px; color: var(--text3); display: flex; align-items: center; gap: 8px; }
+.sent-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; }
+.sent-pos { background: var(--green-dim); color: var(--green); }
+.sent-neg { background: var(--red-dim); color: var(--red); }
+.sent-neu { background: var(--bg4); color: var(--text3); }
+
+/* Memo */
+.memo-area { width: 100%; background: var(--bg3); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); color: var(--text); font-family: 'Noto Sans KR', sans-serif; font-size: 12px; padding: 10px; resize: none; outline: none; }
+.memo-area:focus { border-color: var(--blue); }
+.save-btn { margin-top: 6px; font-size: 12px; padding: 6px 14px; border: 0.5px solid var(--blue); border-radius: var(--radius-sm); background: var(--blue-dim); color: var(--blue); cursor: pointer; transition: background 0.2s; }
+.save-btn:hover { background: rgba(74,158,255,0.2); }
+
+/* Score history chart */
+.history-wrap { margin-bottom: 10px; }
+.history-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.h-date { font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace; width: 42px; }
+.h-bar-bg { flex: 1; height: 6px; background: var(--bg4); border-radius: 3px; overflow: hidden; }
+.h-bar { height: 100%; border-radius: 3px; transition: width 0.6s; }
+.h-score { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text2); width: 20px; text-align: right; }
+.h-ret { font-size: 10px; font-family: 'JetBrains Mono', monospace; width: 42px; text-align: right; }
+
+/* Bottom nav */
+.bottom-nav { position: sticky; bottom: 0; background: var(--bg2); border-top: 0.5px solid var(--border); display: flex; padding: 8px 0 calc(8px + env(safe-area-inset-bottom)); }
+.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; padding: 4px 0; }
+.nav-icon { font-size: 18px; }
+.nav-label { font-size: 10px; color: var(--text3); }
+.nav-item.active .nav-label { color: var(--blue); }
+.nav-item.active .nav-icon { filter: drop-shadow(0 0 6px var(--blue)); }
+
+/* Notification modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: flex-end; justify-content: center; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal { background: var(--bg2); border: 0.5px solid var(--border2); border-radius: 16px 16px 0 0; width: 100%; max-width: 480px; padding: 20px 20px 32px; transform: translateY(100%); transition: transform 0.3s; }
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal-title { font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+.noti-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 0.5px solid var(--border); }
+.noti-row:last-child { border-bottom: none; }
+.noti-info { font-size: 13px; }
+.noti-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.toggle { width: 40px; height: 22px; border-radius: 11px; background: var(--bg4); border: 0.5px solid var(--border2); position: relative; cursor: pointer; transition: background 0.3s; }
+.toggle.on { background: var(--blue); border-color: var(--blue); }
+.toggle-knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--text2); transition: all 0.3s; }
+.toggle.on .toggle-knob { left: 20px; background: white; }
+
+/* Watchlist empty */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text3); }
+.empty-icon { font-size: 40px; margin-bottom: 10px; }
+.empty-text { font-size: 13px; }
+
+/* Score badge highlight */
+.score-5 .sname { color: var(--blue); }
+.score-badge { font-size: 10px; padding: 1px 6px; border-radius: 4px; }
+.sb-5 { background: var(--blue-dim); color: var(--blue); border: 0.5px solid rgba(74,158,255,0.3); }
+.sb-4 { background: var(--green-dim); color: var(--green); border: 0.5px solid rgba(61,214,140,0.3); }
+.sb-3 { background: var(--amber-dim); color: var(--amber); border: 0.5px solid rgba(255,184,74,0.3); }
+.sb-low { background: var(--bg4); color: var(--text3); border: 0.5px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">국장<span>스크리너</span></div>
+    <div class="header-right">
+      <div class="time-badge" id="clock">--:--</div>
+      <div class="noti-btn" onclick="switchMainTab(4)">🔔</div>
+    </div>
+  </div>
+
+  <!-- Market bar -->
+  <div class="market-bar">
+    <div class="market-status">
+      <div class="dot-live"></div>
+      <span style="font-size:11px;color:var(--text2)">장 마감 후 분석</span>
+    </div>
+    <div class="market-indices">
+      <div class="idx"><span class="idx-name">KOSPI</span><span class="idx-val">2,538</span> <span class="idx-chg dn">-0.42%</span></div>
+      <div class="idx"><span class="idx-name">KOSDAQ</span><span class="idx-val">723</span> <span class="idx-chg up">+0.81%</span></div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs-wrap">
+    <div class="tabs">
+      <div class="tab active" id="tab0" onclick="switchMainTab(0)">📊 코스피</div>
+      <div class="tab" id="tab1" onclick="switchMainTab(1)">📈 코스닥</div>
+      <div class="tab" id="tab2" onclick="switchMainTab(2)">⭐ 관심</div>
+      <div class="tab" id="tab3" onclick="switchMainTab(3)">📋 기록</div>
+    </div>
+  </div>
+
+  <!-- Filter chips -->
+  <div class="filter-row" id="filterRow">
+    <div class="filter-chip active" onclick="setFilter('all',this)">전체</div>
+    <div class="filter-chip" onclick="setFilter('high',this)">추천 4점↑</div>
+    <div class="filter-chip" onclick="setFilter('drop',this)">낙폭과대</div>
+    <div class="filter-chip" onclick="setFilter('pbr',this)">PBR 저평가</div>
+    <div class="filter-chip" onclick="setFilter('foreign',this)">외인매수</div>
+    <div class="filter-chip" onclick="setFilter('dividend',this)">고배당</div>
+  </div>
+
+  <!-- Stock list -->
+  <div class="stock-list" id="stockList"></div>
+
+  <div id="settingsPanel" style="display:none;padding:16px;flex:1;overflow-y:auto;">
+  <!-- API 연결 상태 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">KIS API 연결 상태</div>
+    <div id="apiStatusBadge" style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius-sm);border:0.5px solid var(--border);">
+      <div id="apiStatusDot" style="width:8px;height:8px;border-radius:50%;background:var(--text3)"></div>
+      <span id="apiStatusText" style="font-size:13px;color:var(--text2)">API 키 미설정</span>
+    </div>
+    <div id="apiTokenInfo" style="margin-top:8px;font-size:11px;color:var(--text3);display:none"></div>
+  </div>
+
+  <!-- App Key 입력 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">KIS App Key / Secret 입력</div>
+    <div style="margin-bottom:8px;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">App Key</div>
+      <input id="inputAppKey" type="password" placeholder="PS0knAM6JLAjIa93Mi..." style="width:100%;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:9px 12px;outline:none;" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border2)'"/>
+    </div>
+    <div style="margin-bottom:12px;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">App Secret</div>
+      <input id="inputAppSecret" type="password" placeholder="V9J3YGPE5q2ZRG5Egqn..." style="width:100%;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:9px 12px;outline:none;" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border2)'"/>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="saveAndConnect()" style="flex:1;padding:10px;background:var(--blue-dim);border:0.5px solid var(--blue);border-radius:var(--radius-sm);color:var(--blue);font-size:13px;font-weight:500;cursor:pointer;">저장 및 토큰 발급</button>
+      <button onclick="clearKeys()" style="padding:10px 14px;background:transparent;border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text3);font-size:13px;cursor:pointer;">초기화</button>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--text3);">⚠️ 키는 이 기기 브라우저에만 저장됩니다. 타인과 공유하지 마세요.</div>
+  </div>
+
+  <!-- 실시간 데이터 불러오기 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">실시간 데이터 새로고침</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">KIS API 연결 후 버튼을 누르면 거래량 상위 종목·시세·재무데이터를 실제 데이터로 교체합니다.</div>
+    <button onclick="fetchLiveData()" style="width:100%;padding:10px;background:var(--green-dim);border:0.5px solid var(--green);border-radius:var(--radius-sm);color:var(--green);font-size:13px;font-weight:500;cursor:pointer;" id="fetchBtn">📡 실시간 데이터 불러오기</button>
+    <div id="fetchStatus" style="margin-top:8px;font-size:11px;color:var(--text3);"></div>
+  </div>
+
+  <!-- 알림 설정 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">알림 설정</div>
+    <div class="noti-row">
+      <div><div class="noti-info">장 마감 후 분석 완료</div><div class="noti-sub">매일 오후 4:00 · 거래량 TOP10</div></div>
+      <div class="toggle on" onclick="toggleNoti(this)"><div class="toggle-knob"></div></div>
+    </div>
+    <div class="noti-row">
+      <div><div class="noti-info">장 개장 전 브리핑</div><div class="noti-sub">매일 오전 8:30 · 주목 종목</div></div>
+      <div class="toggle on" onclick="toggleNoti(this)"><div class="toggle-knob"></div></div>
+    </div>
+    <div class="noti-row">
+      <div><div class="noti-info">관심종목 점수 변동</div><div class="noti-sub">점수 1점 이상 변동 시</div></div>
+      <div class="toggle" onclick="toggleNoti(this)"><div class="toggle-knob"></div></div>
+    </div>
+    <div class="noti-row" style="border-bottom:none;">
+      <div><div class="noti-info">5점 종목 긴급 알림</div><div class="noti-sub">추천 5점 종목 등장 시 즉시</div></div>
+      <div class="toggle on" onclick="toggleNoti(this)"><div class="toggle-knob"></div></div>
+    </div>
+  </div>
+
+  <!-- 앱 정보 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:24px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">앱 정보</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.8;">
+      <div>버전: 1.0.0 (샘플→실전 전환)</div>
+      <div>데이터: KIS Open API (한국투자증권)</div>
+      <div>AI 분석: Claude Sonnet</div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text3);">※ 본 앱은 투자 참고용이며, 투자 손익에 대한 책임은 본인에게 있습니다.</div>
+    </div>
+  </div>
+</div>
+
+  <!-- Bottom nav -->
+  <div class="bottom-nav">
+    <div class="nav-item active" id="nav0" onclick="switchMainTab(0)">
+      <div class="nav-icon">📊</div>
+      <div class="nav-label">스크리너</div>
+    </div>
+    <div class="nav-item" id="nav2" onclick="switchMainTab(2)">
+      <div class="nav-icon">⭐</div>
+      <div class="nav-label">관심</div>
+    </div>
+    <div class="nav-item" id="nav3" onclick="switchMainTab(3)">
+      <div class="nav-icon">📋</div>
+      <div class="nav-label">점수기록</div>
+    </div>
+    <div class="nav-item" id="nav4" onclick="switchMainTab(4)">
+      <div class="nav-icon">⚙️</div>
+      <div class="nav-label">설정</div>
+    </div>
+  </div>
+
+</div>
+
+
+<!-- Notification settings moved to Settings tab -->
+
+<script>
+// ── KIS API Config ────────────────────────────────────────────────
+// KIS API는 브라우저에서 직접 호출 불가 (CORS 차단)
+// Netlify Function(kis-proxy.js)을 중계 서버로 사용
+let KIS_APP_KEY = localStorage.getItem('kis_app_key') || '';
+let KIS_APP_SECRET = localStorage.getItem('kis_app_secret') || '';
+let KIS_ACCESS_TOKEN = localStorage.getItem('kis_access_token') || '';
+let KIS_TOKEN_EXPIRED = localStorage.getItem('kis_token_expired') || '';
+
+// 프록시 엔드포인트 — Netlify Function
+const PROXY_URL = '/.netlify/functions/kis-proxy';
+
+// ── 프록시를 통한 API 호출 헬퍼 ──────────────────────────────────
+async function kisProxy(action, extraParams = {}) {
+  try {
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action,
+        appkey: KIS_APP_KEY,
+        appsecret: KIS_APP_SECRET,
+        token: KIS_ACCESS_TOKEN,
+        params: extraParams,
+      }),
+    });
+    if (!res.ok) {
+      console.error('[Proxy 오류]', action, res.status);
+      return null;
+    }
+    return await res.json();
+  } catch(e) {
+    console.error('[Proxy fetch 오류]', e.message);
+    return null;
+  }
+}
+
+// ── 토큰 발급 ──────────────────────────────────────────────────────
+async function getAccessToken() {
+  if (!KIS_APP_KEY || !KIS_APP_SECRET) return null;
+  // 저장된 토큰 유효하면 재사용
+  if (KIS_ACCESS_TOKEN && KIS_TOKEN_EXPIRED) {
+    const exp = new Date(KIS_TOKEN_EXPIRED);
+    if (new Date() < exp) return KIS_ACCESS_TOKEN;
+  }
+  const data = await kisProxy('getToken');
+  if (data && data.access_token) {
+    KIS_ACCESS_TOKEN = data.access_token;
+    KIS_TOKEN_EXPIRED = data.access_token_token_expired || '';
+    localStorage.setItem('kis_access_token', KIS_ACCESS_TOKEN);
+    localStorage.setItem('kis_token_expired', KIS_TOKEN_EXPIRED);
+    return KIS_ACCESS_TOKEN;
+  }
+  console.error('[토큰발급 실패] 응답:', JSON.stringify(data));
+  return null;
+}
+
+// ── 거래량 상위 종목 조회 ──────────────────────────────────────────
+async function fetchVolumeRanking(market) {
+  const token = await getAccessToken();
+  if (!token) return [];
+  const data = await kisProxy('volumeRank', { market });
+  if (!data || !data.output) {
+    console.warn('[거래량순위] 응답없음', data);
+    return [];
+  }
+  return data.output.slice(0, 10);
+}
+
+// ── 저장 및 토큰 발급 ─────────────────────────────────────────────
+async function saveAndConnect() {
+  const key = document.getElementById('inputAppKey').value.trim();
+  const sec = document.getElementById('inputAppSecret').value.trim();
+  const statusEl = document.getElementById('fetchStatus');
+
+  if (!key || !sec) {
+    updateApiStatus('error', 'App Key와 Secret을 모두 입력하세요');
+    return;
+  }
+
+  KIS_APP_KEY = key;
+  KIS_APP_SECRET = sec;
+  KIS_ACCESS_TOKEN = '';
+  KIS_TOKEN_EXPIRED = '';
+  localStorage.setItem('kis_app_key', KIS_APP_KEY);
+  localStorage.setItem('kis_app_secret', KIS_APP_SECRET);
+  localStorage.removeItem('kis_access_token');
+  localStorage.removeItem('kis_token_expired');
+
+  updateApiStatus('loading', '토큰 발급 중...');
+  if(statusEl) { statusEl.style.color='var(--text2)'; statusEl.textContent = '🔄 KIS 서버에 연결 중...'; }
+
+  try {
+    const token = await getAccessToken();
+    if (token) {
+      const expStr = KIS_TOKEN_EXPIRED
+        ? new Date(KIS_TOKEN_EXPIRED).toLocaleString('ko-KR')
+        : '24시간';
+      updateApiStatus('ok', '연결 성공 ✓  만료: ' + expStr);
+      document.getElementById('inputAppKey').value = '';
+      document.getElementById('inputAppSecret').value = '';
+      const info = document.getElementById('apiTokenInfo');
+      if(info) { info.style.display='block'; info.textContent='App Key: '+KIS_APP_KEY.slice(0,8)+'... 저장완료'; }
+      if(statusEl) { statusEl.style.color='var(--green)'; statusEl.textContent = '✓ 토큰 발급 완료! 이제 실시간 데이터 불러오기를 눌러보세요.'; }
+    } else {
+      updateApiStatus('error', '연결 실패');
+      if(statusEl) {
+        statusEl.style.color='var(--red)';
+        statusEl.innerHTML = '❌ 연결 실패. 아래를 확인하세요:<br>'
+          + '① App Key/Secret이 정확한지 확인<br>'
+          + '② <b>실전투자</b> 계좌 키인지 확인 (모의투자 키 아님)<br>'
+          + '③ netlify/functions/kis-proxy.js 파일이 업로드됐는지 확인';
+      }
+    }
+  } catch(e) {
+    updateApiStatus('error', '오류: ' + e.message);
+    if(statusEl) { statusEl.style.color='var(--red)'; statusEl.textContent = '오류: ' + e.message; }
+  }
+}
+
+// ── 연결 상태 초기화 ───────────────────────────────────────────────
+function initApiStatus() {
+  if (!KIS_APP_KEY) { updateApiStatus('none','API 키 미설정'); return; }
+  if (KIS_ACCESS_TOKEN && KIS_TOKEN_EXPIRED) {
+    const exp = new Date(KIS_TOKEN_EXPIRED);
+    if (new Date() < exp) {
+      updateApiStatus('ok','연결됨 · 만료: '+exp.toLocaleString('ko-KR'));
+      return;
+    }
+  }
+  updateApiStatus('error','토큰 만료 — 재발급 필요');
+}
+
+
+async function fetchLiveData() {
+  const btn = document.getElementById('fetchBtn');
+  const status = document.getElementById('fetchStatus');
+  const token = await getAccessToken();
+  if(!token) { status.textContent='⚠️ API 키가 설정되지 않았습니다. 먼저 키를 입력하세요.'; status.style.color='var(--red)'; return; }
+  btn.textContent = '⏳ 불러오는 중...';
+  btn.disabled = true;
+  status.style.color='var(--text3)';
+  status.textContent = '거래량 상위 종목 조회 중...';
+  try {
+    const kospiRaw = await fetchVolumeRanking('KOSPI');
+    const kosdaqRaw = await fetchVolumeRanking('KOSDAQ');
+    status.textContent = `코스피 ${kospiRaw.length}개, 코스닥 ${kosdaqRaw.length}개 종목 수신. 상세 정보 조회 중...`;
+    // 실제 데이터로 KOSPI_STOCKS / KOSDAQ_STOCKS 업데이트
+    // (실제 운영 시 각 종목별 세부 조회로 채움 — 현재는 거래량 순위 데이터로 이름/코드/거래량 업데이트)
+    if(kospiRaw.length > 0) {
+      kospiRaw.forEach((item, i) => {
+        if(KOSPI_STOCKS[i]) {
+          KOSPI_STOCKS[i].id = item.mksc_shrn_iscd || KOSPI_STOCKS[i].id;
+          KOSPI_STOCKS[i].name = item.hts_kor_isnm || KOSPI_STOCKS[i].name;
+          KOSPI_STOCKS[i].price = parseInt(item.stck_prpr||0) || KOSPI_STOCKS[i].price;
+          KOSPI_STOCKS[i].chg = parseFloat(item.prdy_ctrt||0) || KOSPI_STOCKS[i].chg;
+          KOSPI_STOCKS[i].vol = parseInt(item.acml_vol||0).toLocaleString()+'주';
+        }
+      });
+    }
+    if(kosdaqRaw.length > 0) {
+      kosdaqRaw.forEach((item, i) => {
+        if(KOSDAQ_STOCKS[i]) {
+          KOSDAQ_STOCKS[i].id = item.mksc_shrn_iscd || KOSDAQ_STOCKS[i].id;
+          KOSDAQ_STOCKS[i].name = item.hts_kor_isnm || KOSDAQ_STOCKS[i].name;
+          KOSDAQ_STOCKS[i].price = parseInt(item.stck_prpr||0) || KOSDAQ_STOCKS[i].price;
+          KOSDAQ_STOCKS[i].chg = parseFloat(item.prdy_ctrt||0) || KOSDAQ_STOCKS[i].chg;
+          KOSDAQ_STOCKS[i].vol = parseInt(item.acml_vol||0).toLocaleString()+'주';
+        }
+      });
+    }
+    renderList();
+    const now = new Date().toLocaleTimeString('ko-KR');
+    status.textContent = `✓ 업데이트 완료 (${now})`;
+    status.style.color = 'var(--green)';
+  } catch(e) {
+    status.textContent = '오류: ' + e.message;
+    status.style.color = 'var(--red)';
+  }
+  btn.textContent = '📡 실시간 데이터 불러오기';
+  btn.disabled = false;
+}
+
+// ── Data ──────────────────────────────────────────────────────────
+const KOSPI_STOCKS = [
+  { id:'005930', name:'삼성전자', sector:'반도체', price:71200, chg:-1.8, vol:'9,823만', pbr:1.12, per:14.2, roe:8.3, debt:28, ev:8.1, div:2.4, w52:-18, foreign:'+120억', shortScore:4.0, midScore:4.5,
+    intro:'세계 최대 메모리 반도체·스마트폰 제조사. DRAM·NAND 플래시·파운드리·가전·디스플레이 등 전 사업부문을 아우르는 글로벌 종합 전자기업.',
+    tags:['낙폭과대','외인유입','반도체슈퍼사이클','AI수혜'],
+    news:[{t:'삼성전자, HBM3E 엔비디아 납품 최종 승인 임박', src:'한국경제', time:'2시간 전', sent:'pos'},{t:'4분기 반도체 업황 회복 기대... 삼성 목표가 상향', src:'IBK투자증권', time:'4시간 전', sent:'pos'},{t:'파운드리 점유율 TSMC와 격차 확대 우려', src:'조선비즈', time:'7시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:3.5,close:69800,nextClose:71300,ret:'+2.1%'},{d:'04/15',score:4.0,close:71300,nextClose:72200,ret:'+1.3%'},{d:'04/16',score:3.5,close:72200,nextClose:71800,ret:'-0.5%'},{d:'04/17',score:4.0,close:71800,nextClose:72400,ret:'+0.8%'},{d:'04/18',score:4.0,close:71200,nextClose:null,ret:null}]
+  },
+  { id:'000660', name:'SK하이닉스', sector:'반도체', price:182500, chg:-2.3, vol:'4,521만', pbr:1.89, per:11.2, roe:18.1, debt:42, ev:6.8, div:0.8, w52:-12, foreign:'+450억', shortScore:4.5, midScore:5.0,
+    intro:'HBM(고대역폭메모리) 세계 1위 기업. AI 가속기에 필수적인 HBM3E를 엔비디아에 독점 공급 중. DRAM·낸드 플래시 글로벌 2위.',
+    tags:['HBM독점','AI핵심','외인강매수','실적모멘텀'],
+    news:[{t:'SK하이닉스 HBM3E 12단 양산 개시... 엔비디아 전량 공급', src:'전자신문', time:'1시간 전', sent:'pos'},{t:'3분기 영업이익 7조원 전망... 사상 최대치 경신 유력', src:'삼성증권', time:'3시간 전', sent:'pos'},{t:'HBM 경쟁 심화... 마이크론 추격 가속', src:'연합인포맥스', time:'6시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:4.5,close:178200,nextClose:184000,ret:'+3.2%'},{d:'04/15',score:5.0,close:184000,nextClose:187900,ret:'+2.1%'},{d:'04/16',score:4.5,close:187900,nextClose:188500,ret:'+0.3%'},{d:'04/17',score:4.5,close:188500,nextClose:190800,ret:'+1.2%'},{d:'04/18',score:4.5,close:182500,nextClose:null,ret:null}]
+  },
+  { id:'005490', name:'POSCO홀딩스', sector:'철강', price:312000, chg:-3.1, vol:'2,341만', pbr:0.38, per:6.2, roe:6.1, debt:72, ev:4.1, div:3.8, w52:-38, foreign:'+320억', shortScore:5.0, midScore:4.0,
+    intro:'국내 1위 철강기업이자 2차전지 소재(양·음극재, 리튬) 사업을 급성장시키고 있는 그린소재 복합기업. 포스코퓨처엠 등 배터리 소재 계열사 보유.',
+    tags:['낙폭과대','PBR저평가','고배당','2차전지소재','외인유입'],
+    news:[{t:'POSCO홀딩스, 2차전지 소재법인 독립 분리 검토', src:'한국경제', time:'3시간 전', sent:'pos'},{t:'중국 철강 수요 반등 조짐... 국내 철강주 수혜 전망', src:'매일경제', time:'6시간 전', sent:'pos'},{t:'글로벌 철강 공급과잉 우려 지속', src:'연합인포맥스', time:'9시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:4.5,close:308000,nextClose:313500,ret:'+1.8%'},{d:'04/15',score:5.0,close:313500,nextClose:321000,ret:'+2.4%'},{d:'04/16',score:4.5,close:321000,nextClose:317100,ret:'-1.2%'},{d:'04/17',score:5.0,close:317100,nextClose:319000,ret:'+0.6%'},{d:'04/18',score:5.0,close:312000,nextClose:null,ret:null}]
+  },
+  { id:'035720', name:'카카오', sector:'인터넷', price:38450, chg:+0.9, vol:'2,180만', pbr:1.21, per:28.4, roe:4.2, debt:95, ev:12.3, div:0.2, w52:-52, foreign:'-80억', shortScore:2.0, midScore:2.5,
+    intro:'국내 최대 모바일 메신저 카카오톡 운영사. 카카오페이·카카오뱅크·카카오엔터 등 방대한 계열사 생태계 보유. 광고·커머스·콘텐츠 수익 모델.',
+    tags:['52주신저근접','외인매도','규제리스크','실적부진'],
+    news:[{t:'카카오, SM엔터 인수 관련 공정위 과징금 최종 확정', src:'뉴시스', time:'2시간 전', sent:'neg'},{t:'카카오페이 흑자전환 성공... 자회사 가치 재평가 기대', src:'머니투데이', time:'5시간 전', sent:'pos'},{t:'카카오톡 MAU 성장 정체... 광고 수익 둔화', src:'조선비즈', time:'8시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:2.5,close:40200,nextClose:39700,ret:'-1.2%'},{d:'04/15',score:2.0,close:39700,nextClose:38900,ret:'-2.1%'},{d:'04/16',score:2.0,close:38900,nextClose:39100,ret:'+0.5%'},{d:'04/17',score:2.0,close:39100,nextClose:39530,ret:'+1.1%'},{d:'04/18',score:2.0,close:38450,nextClose:null,ret:null}]
+  },
+  { id:'005380', name:'현대차', sector:'자동차', price:224500, chg:-0.5, vol:'1,920만', pbr:0.71, per:5.8, roe:12.4, debt:183, ev:3.2, div:4.1, w52:-8, foreign:'+210억', shortScore:3.0, midScore:3.5,
+    intro:'국내 1위 완성차 기업. 아이오닉 브랜드를 앞세운 전기차 전환과 제네시스 럭셔리 브랜드로 글로벌 시장 점유율 확대 중. 미국·인도 공장 증설.',
+    tags:['저PBR','고배당','전기차전환','미국공장'],
+    news:[{t:'현대차 아이오닉9 미국 출시... 초도물량 완판', src:'연합뉴스', time:'2시간 전', sent:'pos'},{t:'2분기 미국 관세 영향 실적 하향 가능성', src:'하나증권', time:'5시간 전', sent:'neg'},{t:'인도 IPO 흥행... 현대차인디아 시총 20조원 돌파', src:'한국경제', time:'7시간 전', sent:'pos'}],
+    history:[{d:'04/14',score:3.0,close:222800,nextClose:224600,ret:'+0.8%'},{d:'04/15',score:3.5,close:224600,nextClose:227100,ret:'+1.1%'},{d:'04/16',score:3.0,close:227100,nextClose:225000,ret:'-0.9%'},{d:'04/17',score:3.0,close:225000,nextClose:225900,ret:'+0.4%'},{d:'04/18',score:3.0,close:224500,nextClose:null,ret:null}]
+  },
+  { id:'051910', name:'LG화학', sector:'화학/배터리', price:268000, chg:-1.2, vol:'1,540만', pbr:0.82, per:18.1, roe:5.3, debt:88, ev:7.4, div:1.9, w52:-44, foreign:'+90억', shortScore:3.5, midScore:4.0,
+    intro:'배터리 소재·석유화학·생명과학 사업을 영위하는 종합 화학기업. LG에너지솔루션 모회사. 양극재 세계 1위를 목표로 대규모 투자 진행 중.',
+    tags:['낙폭과대','배터리소재','PBR저평가','구조조정'],
+    news:[{t:'LG화학, 석유화학 사업 분리 매각 추진 검토', src:'서울경제', time:'1시간 전', sent:'pos'},{t:'배터리 소재 양극재 수요 회복 신호... 하반기 반등 기대', src:'키움증권', time:'4시간 전', sent:'pos'},{t:'석유화학 업황 바닥 장기화... 영업손실 지속', src:'연합인포맥스', time:'8시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:3.0,close:271500,nextClose:270100,ret:'-0.5%'},{d:'04/15',score:3.5,close:270100,nextClose:276100,ret:'+2.2%'},{d:'04/16',score:3.5,close:276100,nextClose:273100,ret:'-1.1%'},{d:'04/17',score:3.5,close:273100,nextClose:275000,ret:'+0.7%'},{d:'04/18',score:3.5,close:268000,nextClose:null,ret:null}]
+  },
+  { id:'028260', name:'삼성물산', sector:'건설/지주', price:118500, chg:-0.8, vol:'980만', pbr:0.68, per:12.3, roe:5.8, debt:42, ev:5.9, div:2.1, w52:-15, foreign:'+50억', shortScore:3.0, midScore:3.0,
+    intro:'삼성그룹 지주사 역할을 하는 건설·상사·패션·리조트 복합기업. 삼성전자·삼성바이오로직스 지분 보유로 자산가치 대비 심한 할인 거래.',
+    tags:['지주사할인','자산가치','저PBR'],
+    news:[{t:'삼성물산 지주사 전환 가능성 재부상... 자산가치 재평가', src:'머니투데이', time:'3시간 전', sent:'pos'},{t:'건설 부문 해외 수주 5조원 달성', src:'이데일리', time:'7시간 전', sent:'pos'}],
+    history:[{d:'04/14',score:2.5,close:118900,nextClose:119300,ret:'+0.3%'},{d:'04/15',score:3.0,close:119300,nextClose:120400,ret:'+0.9%'},{d:'04/16',score:3.0,close:120400,nextClose:119900,ret:'-0.4%'},{d:'04/17',score:3.0,close:119900,nextClose:120100,ret:'+0.2%'},{d:'04/18',score:3.0,close:118500,nextClose:null,ret:null}]
+  },
+  { id:'000270', name:'기아', sector:'자동차', price:88400, chg:+0.3, vol:'870만', pbr:0.82, per:4.9, roe:17.2, debt:168, ev:2.8, div:5.2, w52:-6, foreign:'+180억', shortScore:3.5, midScore:4.0,
+    intro:'현대차그룹 계열 완성차 기업. EV6·EV9 등 전기차 라인업 강화 중. 고배당 정책과 자사주 매입으로 주주환원 강화. 글로벌 판매 900만대 목표.',
+    tags:['고배당','저PER','주주환원','전기차'],
+    news:[{t:'기아, 2분기 역대 최대 배당 예고... 주주환원 강화', src:'한국경제', time:'2시간 전', sent:'pos'},{t:'EV9 미국 판매 급증... 고마진 SUV 전략 성공', src:'연합뉴스', time:'6시간 전', sent:'pos'}],
+    history:[{d:'04/14',score:3.5,close:87200,nextClose:88400,ret:'+1.4%'},{d:'04/15',score:3.5,close:88400,nextClose:89100,ret:'+0.8%'},{d:'04/16',score:3.5,close:89100,nextClose:89300,ret:'+0.2%'},{d:'04/17',score:3.5,close:89300,nextClose:89000,ret:'-0.3%'},{d:'04/18',score:3.5,close:88400,nextClose:null,ret:null}]
+  },
+  { id:'207940', name:'삼성바이오로직스', sector:'바이오', price:895000, chg:+1.2, vol:'520만', pbr:6.21, per:42.1, roe:14.8, debt:38, ev:28.4, div:0.1, w52:+12, foreign:'+280억', shortScore:2.5, midScore:3.0,
+    intro:'세계 최대 규모의 바이오의약품 위탁생산(CMO/CDMO) 기업. 인천 송도에 초대형 공장을 운영. 글로벌 빅파마들의 핵심 파트너로 수주 잔고 급증.',
+    tags:['CDMO세계최대','수주잔고','고밸류'],
+    news:[{t:'삼성바이오, 머크·BMS와 CMO 계약 3조원 추가 체결', src:'파이낸셜뉴스', time:'1시간 전', sent:'pos'},{t:'5공장 건설 착공... 2026년 가동시 세계 1위 공고화', src:'바이오타임즈', time:'5시간 전', sent:'pos'},{t:'밸류에이션 부담... PER 40배 수준 논란', src:'대신증권', time:'9시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:2.5,close:879000,nextClose:886000,ret:'+0.8%'},{d:'04/15',score:2.5,close:886000,nextClose:895800,ret:'+1.1%'},{d:'04/16',score:2.5,close:895800,nextClose:900300,ret:'+0.5%'},{d:'04/17',score:2.5,close:900300,nextClose:908400,ret:'+0.9%'},{d:'04/18',score:2.5,close:895000,nextClose:null,ret:null}]
+  },
+  { id:'096770', name:'SK이노베이션', sector:'에너지/배터리', price:98200, chg:-2.8, vol:'480만', pbr:0.52, per:9.1, roe:5.9, debt:112, ev:5.1, div:2.8, w52:-41, foreign:'+140억', shortScore:4.0, midScore:3.5,
+    intro:'SK그룹의 에너지·화학·배터리 복합 기업. SK온(전기차 배터리) 자회사를 통해 포드·폭스바겐·현대차에 배터리 공급. 정유·석유화학 사업 병행.',
+    tags:['낙폭과대','배터리','저PBR','구조개선중'],
+    news:[{t:'SK온, 흑자전환 로드맵 발표... 2025년 BEP 목표', src:'매일경제', time:'2시간 전', sent:'pos'},{t:'SK이노베이션-SK E&S 합병 시너지 가시화', src:'서울경제', time:'5시간 전', sent:'pos'},{t:'배터리 업황 회복 지연... 적자 장기화 우려', src:'한국경제', time:'8시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:3.5,close:96200,nextClose:98900,ret:'+2.8%'},{d:'04/15',score:4.0,close:98900,nextClose:100500,ret:'+1.6%'},{d:'04/16',score:4.0,close:100500,nextClose:98400,ret:'-2.1%'},{d:'04/17',score:4.0,close:98400,nextClose:99400,ret:'+1.0%'},{d:'04/18',score:4.0,close:98200,nextClose:null,ret:null}]
+  },
+];
+
+const KOSDAQ_STOCKS = [
+  { id:'247540', name:'에코프로비엠', sector:'배터리소재', price:132000, chg:-4.2, vol:'3,821만', pbr:4.12, per:38.4, roe:11.2, debt:88, ev:22.1, div:0.3, w52:-62, foreign:'+280억', shortScore:4.5, midScore:4.0,
+    intro:'전기차 배터리 핵심 소재인 양극재 국내 1위 제조사. 에코프로 그룹의 핵심 계열사. 삼성SDI·SK온에 NCA·NCM 양극재 독점 공급.',
+    tags:['낙폭과대','양극재1위','HLR','외인유입'],
+    news:[{t:'에코프로비엠, 캐나다 양극재 공장 착공... 북미 공략', src:'전자신문', time:'1시간 전', sent:'pos'},{t:'전기차 수요 회복 기대... 양극재 업황 바닥 통과', src:'NH투자증권', time:'4시간 전', sent:'pos'},{t:'단기 실적 부진 지속... 가동률 60% 미만', src:'한국경제', time:'7시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:4.0,close:128500,nextClose:132500,ret:'+3.1%'},{d:'04/15',score:4.5,close:132500,nextClose:136200,ret:'+2.8%'},{d:'04/16',score:4.0,close:136200,nextClose:134200,ret:'-1.5%'},{d:'04/17',score:4.5,close:134200,nextClose:136600,ret:'+1.8%'},{d:'04/18',score:4.5,close:132000,nextClose:null,ret:null}]
+  },
+  { id:'086520', name:'에코프로', sector:'배터리소재', price:68400, chg:-3.8, vol:'2,940만', pbr:5.82, per:45.2, roe:13.1, debt:62, ev:28.3, div:0.2, w52:-71, foreign:'+190억', shortScore:4.0, midScore:3.5,
+    intro:'에코프로비엠·에코프로HN 등을 거느린 에코프로 그룹의 지주사. 배터리 소재 수직계열화 완성. 2차전지 테마의 대표주자.',
+    tags:['낙폭과대','그룹지주','밸류에이션부담'],
+    news:[{t:'에코프로 지주사 할인 해소 기대... NAV 대비 60% 수준', src:'삼성증권', time:'2시간 전', sent:'pos'},{t:'2차전지 업황 하반기 반등 전망... 에코프로 반사이익', src:'키움증권', time:'5시간 전', sent:'pos'}],
+    history:[{d:'04/14',score:3.5,close:65800,nextClose:67400,ret:'+2.4%'},{d:'04/15',score:4.0,close:67400,nextClose:69500,ret:'+3.1%'},{d:'04/16',score:3.5,close:69500,nextClose:68100,ret:'-2.0%'},{d:'04/17',score:4.0,close:68100,nextClose:69100,ret:'+1.4%'},{d:'04/18',score:4.0,close:68400,nextClose:null,ret:null}]
+  },
+  { id:'003530', name:'대한전선', sector:'전선/전력', price:24850, chg:+5.8, vol:'2,210만', pbr:1.82, per:14.2, roe:13.4, debt:185, ev:9.8, div:1.1, w52:+48, foreign:'+320억', shortScore:3.5, midScore:4.5,
+    intro:'국내 2위 전선 제조사. 초고압 해저케이블·전력케이블 전문. AI 데이터센터 전력 수요 급증과 전력망 현대화 수혜주. 미국 수출 급증.',
+    tags:['전력망수혜','AI인프라','미국수출','신고가'],
+    news:[{t:'대한전선, 미국 HVDC 케이블 수주 1조원 달성', src:'연합뉴스', time:'1시간 전', sent:'pos'},{t:'전력망 현대화 사업 글로벌 확대... 초고압 케이블 수요 폭증', src:'머니투데이', time:'3시간 전', sent:'pos'},{t:'주가 급등에 따른 차익실현 매물 증가', src:'이데일리', time:'7시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:3.5,close:20800,nextClose:21700,ret:'+4.2%'},{d:'04/15',score:4.0,close:21700,nextClose:22500,ret:'+3.8%'},{d:'04/16',score:3.5,close:22500,nextClose:22970,ret:'+2.1%'},{d:'04/17',score:3.5,close:22970,nextClose:23410,ret:'+1.9%'},{d:'04/18',score:3.5,close:24850,nextClose:null,ret:null}]
+  },
+  { id:'041510', name:'에스엠', sector:'엔터테인먼트', price:72100, chg:-1.4, vol:'1,580만', pbr:2.31, per:19.8, roe:11.8, debt:28, ev:11.2, div:1.4, w52:-28, foreign:'+45억', shortScore:3.0, midScore:3.5,
+    intro:'SM엔터테인먼트. 아이돌 기획·음반·공연·IP 사업. EXO·aespa·NCT·샤이니 등 다수 글로벌 아티스트 보유. 카카오 자회사.',
+    tags:['K팝','IP가치','카카오자회사','낙폭'],
+    news:[{t:'aespa 월드투어 전석 매진... SM 실적 하반기 급증 전망', src:'스포츠조선', time:'2시간 전', sent:'pos'},{t:'SM, 일본·미국 레이블과 합작법인 설립 추진', src:'연예계소식', time:'6시간 전', sent:'pos'},{t:'경영권 분쟁 여진... 아티스트 재계약 리스크', src:'한국경제', time:'9시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:2.5,close:73900,nextClose:73300,ret:'-0.8%'},{d:'04/15',score:3.0,close:73300,nextClose:74200,ret:'+1.2%'},{d:'04/16',score:3.0,close:74200,nextClose:74400,ret:'+0.3%'},{d:'04/17',score:3.0,close:74400,nextClose:74000,ret:'-0.5%'},{d:'04/18',score:3.0,close:72100,nextClose:null,ret:null}]
+  },
+  { id:'196170', name:'알테오젠', sector:'바이오/제약', price:312000, chg:+2.1, vol:'1,240만', pbr:18.4, per:null, roe:-2.1, debt:12, ev:null, div:0.0, w52:+124, foreign:'+680억', shortScore:3.0, midScore:4.0,
+    intro:'피하주사(SC) 제형 변경 기술 플랫폼 ALT-B4 보유 바이오텍. 머크·얀센·할로자임과 경쟁하는 히알루로니다제 기술 라이선스아웃. 기술수출 매출 급증.',
+    tags:['기술수출','SC플랫폼','외인급매수','성장주'],
+    news:[{t:'알테오젠, 글로벌 빅파마 추가 기술수출 계약 임박', src:'바이오타임즈', time:'1시간 전', sent:'pos'},{t:'ALT-B4 임상 결과 긍정적... SC 플랫폼 가치 재평가', src:'한국바이오협회', time:'4시간 전', sent:'pos'},{t:'흑자전환까지 시간 필요... 적자 지속 중', src:'한국경제', time:'8시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:3.0,close:288000,nextClose:302800,ret:'+5.1%'},{d:'04/15',score:3.5,close:302800,nextClose:311300,ret:'+2.8%'},{d:'04/16',score:3.0,close:311300,nextClose:315000,ret:'+1.2%'},{d:'04/17',score:3.0,close:315000,nextClose:317500,ret:'+0.8%'},{d:'04/18',score:3.0,close:312000,nextClose:null,ret:null}]
+  },
+  { id:'035900', name:'JYP Ent.', sector:'엔터테인먼트', price:52800, chg:-2.2, vol:'980만', pbr:3.12, per:16.4, roe:19.8, debt:8, ev:9.8, div:1.8, w52:-32, foreign:'+28억', shortScore:3.5, midScore:4.0,
+    intro:'JYP엔터테인먼트. TWICE·스트레이키즈·ITZY·NiziU 등 다수 글로벌 아이돌 그룹 보유. 멀티레이블 전략과 일본·미국 시장 확장 중.',
+    tags:['K팝','글로벌확장','낙폭과대','고ROE'],
+    news:[{t:'스트레이키즈 미국 투어 매출 2,000억 돌파', src:'스포츠동아', time:'3시간 전', sent:'pos'},{t:'JYP, 미국 현지 레이블 설립... 팝스타 육성 시동', src:'연예계소식', time:'6시간 전', sent:'pos'}],
+    history:[{d:'04/14',score:3.0,close:51900,nextClose:52800,ret:'+1.8%'},{d:'04/15',score:3.5,close:52800,nextClose:53900,ret:'+2.1%'},{d:'04/16',score:3.5,close:53900,nextClose:53500,ret:'-0.7%'},{d:'04/17',score:3.5,close:53500,nextClose:53800,ret:'+0.5%'},{d:'04/18',score:3.5,close:52800,nextClose:null,ret:null}]
+  },
+  { id:'263750', name:'펄어비스', sector:'게임', price:38200, chg:-1.8, vol:'870만', pbr:1.88, per:null, roe:-3.2, debt:18, ev:null, div:0.0, w52:-45, foreign:'-12억', shortScore:2.5, midScore:3.5,
+    intro:'검은사막 IP를 보유한 국내 대형 게임사. 신작 붉은사막(Red Desert) 개발 중으로 글로벌 출시 기대감 높음. PC·모바일·콘솔 멀티플랫폼.',
+    tags:['신작대기','낙폭과대','게임IP','붉은사막'],
+    news:[{t:'붉은사막 2025년 하반기 출시 확정... 글로벌 기대작', src:'게임메카', time:'2시간 전', sent:'pos'},{t:'검은사막 글로벌 MAU 회복세... 매출 반등', src:'이데일리', time:'5시간 전', sent:'pos'},{t:'게임 업황 침체 속 실적 적자 지속', src:'한국경제', time:'8시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:2.0,close:39900,nextClose:39300,ret:'-1.5%'},{d:'04/15',score:2.5,close:39300,nextClose:39600,ret:'+0.8%'},{d:'04/16',score:2.5,close:39600,nextClose:39200,ret:'-0.9%'},{d:'04/17',score:2.5,close:39200,nextClose:39700,ret:'+1.2%'},{d:'04/18',score:2.5,close:38200,nextClose:null,ret:null}]
+  },
+  { id:'009830', name:'한화솔루션', sector:'태양광/화학', price:22450, chg:-2.4, vol:'820만', pbr:0.62, per:22.1, roe:2.8, debt:128, ev:8.4, div:0.9, w52:-52, foreign:'+95억', shortScore:3.5, midScore:4.0,
+    intro:'태양광 모듈·셀 제조 및 석유화학 사업 영위. 미국 조지아 공장에서 태양광 모듈 생산. IRA(인플레이션 감축법) 최대 수혜 기업 중 하나.',
+    tags:['IRA수혜','태양광','낙폭과대','미국공장'],
+    news:[{t:'한화솔루션 IRA 세액공제 3천억원 수령 확정', src:'한국경제', time:'2시간 전', sent:'pos'},{t:'미국 태양광 시장 성장 가속... 한화 점유율 1위', src:'에너지경제', time:'5시간 전', sent:'pos'},{t:'석유화학 업황 부진... 수익성 개선 지연', src:'조선비즈', time:'9시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:3.0,close:21500,nextClose:21950,ret:'+2.1%'},{d:'04/15',score:3.5,close:21950,nextClose:22350,ret:'+1.8%'},{d:'04/16',score:3.5,close:22350,nextClose:22000,ret:'-1.4%'},{d:'04/17',score:3.5,close:22000,nextClose:22200,ret:'+0.9%'},{d:'04/18',score:3.5,close:22450,nextClose:null,ret:null}]
+  },
+  { id:'122870', name:'와이지엔터테인먼트', sector:'엔터테인먼트', price:42100, chg:+1.4, vol:'760만', pbr:1.42, per:14.8, roe:9.8, debt:22, ev:8.1, div:1.2, w52:-18, foreign:'+18억', shortScore:3.0, midScore:3.5,
+    intro:'BLACKPINK·BIGBANG·TREASURE 등을 보유한 YG엔터테인먼트. K팝 4대 기획사 중 하나. BLACKPINK 솔로 활동 및 그룹 재결합 기대.',
+    tags:['BLACKPINK재결합','K팝','저평가'],
+    news:[{t:'BLACKPINK 완전체 컴백 2025년 확정... YG 실적 모멘텀', src:'스타뉴스', time:'1시간 전', sent:'pos'},{t:'TREASURE 일본 투어 전석 매진', src:'연예계소식', time:'4시간 전', sent:'pos'}],
+    history:[{d:'04/14',score:2.5,close:41400,nextClose:41800,ret:'+0.9%'},{d:'04/15',score:3.0,close:41800,nextClose:42400,ret:'+1.5%'},{d:'04/16',score:3.0,close:42400,nextClose:42600,ret:'+0.4%'},{d:'04/17',score:3.0,close:42600,nextClose:42900,ret:'+0.8%'},{d:'04/18',score:3.0,close:42100,nextClose:null,ret:null}]
+  },
+  { id:'091990', name:'셀트리온헬스케어', sector:'바이오/제약', price:68900, chg:-1.1, vol:'710만', pbr:2.82, per:22.4, roe:12.8, debt:48, ev:14.2, div:0.4, w52:-35, foreign:'+210억', shortScore:3.5, midScore:4.5,
+    intro:'셀트리온의 바이오시밀러 제품을 글로벌에 판매·유통하는 전문기업. 램시마·허쥬마·트룩시마 등 자가면역·항암 바이오시밀러 미국·유럽 판매.',
+    tags:['바이오시밀러','미국직판','낙폭과대','셀트리온합병'],
+    news:[{t:'셀트리온헬스케어, 미국 직판 체계 구축 완료... 마진 급상승', src:'바이오타임즈', time:'2시간 전', sent:'pos'},{t:'짐펜트라(램시마SC) 미국 처방 급증... 분기 최대 매출', src:'파이낸셜뉴스', time:'5시간 전', sent:'pos'},{t:'합병 후 통합 작업 지연 우려', src:'한국경제', time:'9시간 전', sent:'neg'}],
+    history:[{d:'04/14',score:3.0,close:67100,nextClose:68100,ret:'+1.4%'},{d:'04/15',score:3.5,close:68100,nextClose:69600,ret:'+2.2%'},{d:'04/16',score:3.5,close:69600,nextClose:69000,ret:'-0.8%'},{d:'04/17',score:3.5,close:69000,nextClose:69800,ret:'+1.1%'},{d:'04/18',score:3.5,close:68900,nextClose:null,ret:null}]
+  },
+];
+
+// ── State ──────────────────────────────────────────────────────────
+let currentMainTab = 0;
+let currentFilter = 'all';
+let expandedId = null;
+let expandedDetailTab = {}; 
+let watchlist = JSON.parse(localStorage.getItem('watchlist') || '[]');
+let memos = JSON.parse(localStorage.getItem('memos') || '{}');
+
+// ── Clock ─────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  document.getElementById('clock').textContent = `${h}:${m}`;
+}
+updateClock();
+setInterval(updateClock, 10000);
+
+// ── Tabs ──────────────────────────────────────────────────────────
+function switchMainTab(idx) {
+  currentMainTab = idx;
+  // tabs (only 0-3 in tab bar)
+  document.querySelectorAll('.tabs .tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+  // bottom nav
+  [0,2,3,4].forEach((n,i) => {
+    const el = document.getElementById('nav'+n);
+    if(el) el.classList.toggle('active', n===idx);
+  });
+  // filter row
+  document.getElementById('filterRow').style.display = (idx<=1) ? 'flex' : 'none';
+  // settings panel vs stock list
+  const sp = document.getElementById('settingsPanel');
+  const sl = document.getElementById('stockList');
+  if(idx===4) {
+    if(sp) sp.style.display='block';
+    if(sl) sl.style.display='none';
+    initApiStatus();
+  } else {
+    if(sp) sp.style.display='none';
+    if(sl) sl.style.display='block';
+    renderList();
+  }
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderList();
+}
+
+// ── Score helpers ──────────────────────────────────────────────────
+function scoreDots(score, type='short') {
+  const filled = Math.round(score);
+  let html = '<div class="score-row">';
+  for(let i=1;i<=5;i++) html += `<div class="sdot ${i<=filled?'fill':'empty'}"></div>`;
+  html += `<span class="score-num">${score.toFixed(1)}</span></div>`;
+  return html;
+}
+function scoreBadge(score) {
+  if(score>=4.5) return `<span class="score-badge sb-5">강력추천</span>`;
+  if(score>=4.0) return `<span class="score-badge sb-4">추천</span>`;
+  if(score>=3.0) return `<span class="score-badge sb-3">중립+</span>`;
+  return `<span class="score-badge sb-low">관망</span>`;
+}
+function barColor(score) {
+  if(score>=4.5) return 'var(--blue)';
+  if(score>=4.0) return 'var(--green)';
+  if(score>=3.0) return 'var(--amber)';
+  return 'var(--text3)';
+}
+
+// ── Filter stocks ──────────────────────────────────────────────────
+function applyFilter(stocks) {
+  if(currentFilter==='all') return stocks;
+  if(currentFilter==='high') return stocks.filter(s=>s.shortScore>=4);
+  if(currentFilter==='drop') return stocks.filter(s=>s.w52<=-30);
+  if(currentFilter==='pbr') return stocks.filter(s=>s.pbr<1.0);
+  if(currentFilter==='foreign') return stocks.filter(s=>s.foreign.startsWith('+'));
+  if(currentFilter==='dividend') return stocks.filter(s=>s.div>=3.0);
+  return stocks;
+}
+
+// ── Render ─────────────────────────────────────────────────────────
+function renderList() {
+  const el = document.getElementById('stockList');
+  if(currentMainTab===2) { renderWatchlist(el); return; }
+  if(currentMainTab===3) { renderHistory(el); return; }
+  const stocks = applyFilter(currentMainTab===0 ? KOSPI_STOCKS : KOSDAQ_STOCKS);
+  if(stocks.length===0) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">해당 조건의 종목이 없습니다</div></div>'; return; }
+  el.innerHTML = stocks.map((s,i) => renderStockCard(s, i+1)).join('');
+}
+
+function renderStockCard(s, rank) {
+  const isExp = expandedId === s.id;
+  const isWatch = watchlist.includes(s.id);
+  const chgClass = s.chg > 0 ? 'up' : 'dn';
+  const chgSign = s.chg > 0 ? '+' : '';
+  return `
+  <div class="stock-card ${isExp?'expanded':''} ${s.shortScore>=4.5?'score-5':''}" id="card-${s.id}">
+    <div class="stock-card-header" onclick="toggleExpand('${s.id}')">
+      <div class="rank-num">${rank}</div>
+      <div class="stock-main">
+        <div class="stock-top">
+          <span class="sname">${s.name}</span>
+          <span class="scode">${s.id}</span>
+          <span class="sector-tag">${s.sector}</span>
+          ${scoreBadge(s.shortScore)}
+        </div>
+        <div class="stock-sub">거래량 ${s.vol} · 52주대비 <span class="${s.w52>=0?'up':'dn'}">${s.w52>=0?'+':''}${s.w52}%</span></div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+          <span class="star-btn ${isWatch?'active':''}" onclick="toggleWatch(event,'${s.id}')">★</span>
+        </div>
+        <div class="price-main">${s.price.toLocaleString()}</div>
+        <div class="price-chg ${chgClass}">${chgSign}${s.chg}%</div>
+        ${scoreDots(s.shortScore)}
+      </div>
+    </div>
+    ${isExp ? renderDetail(s) : ''}
+  </div>`;
+}
+
+function renderDetail(s) {
+  const dtab = expandedDetailTab[s.id] || 0;
+  const tabs = ['분석','뉴스','메모','기록'];
+  return `
+  <div class="stock-detail">
+    <div class="detail-tabs">
+      ${tabs.map((t,i)=>`<div class="dtab ${dtab===i?'active':''}" onclick="switchDetailTab(event,'${s.id}',${i})">${t}</div>`).join('')}
+    </div>
+    <div class="detail-body">
+      ${dtab===0 ? renderAnalysis(s) : ''}
+      ${dtab===1 ? renderNews(s) : ''}
+      ${dtab===2 ? renderMemo(s) : ''}
+      ${dtab===3 ? renderScoreHistory(s) : ''}
+    </div>
+  </div>`;
+}
+
+function renderAnalysis(s) {
+  const mf = (v, good, bad) => {
+    if(v===null||v===undefined) return '';
+    if(typeof good === 'function') return good(v) ? 'good' : (bad && bad(v) ? 'bad' : 'warn');
+    return '';
+  };
+  const pbrFlag = s.pbr < 1 ? 'good' : s.pbr > 3 ? 'bad' : 'warn';
+  const perFlag = s.per && s.per < 10 ? 'good' : s.per && s.per > 30 ? 'bad' : 'warn';
+  const roeFlag = s.roe > 15 ? 'good' : s.roe > 5 ? 'warn' : 'bad';
+  const debtFlag = s.debt < 50 ? 'good' : s.debt < 100 ? 'warn' : 'bad';
+  const divFlag = s.div > 3 ? 'good' : s.div > 1 ? 'warn' : '';
+  const w52Flag = s.w52 <= -30 ? 'good' : s.w52 >= 30 ? 'bad' : '';
+  const forFlag = s.foreign.startsWith('+') ? 'good' : 'bad';
+
+  return `
+    <div class="company-intro"><strong>회사 소개</strong><br>${s.intro}</div>
+    <div class="metrics-grid">
+      <div class="metric-box"><div class="m-label">PBR</div><div class="m-val">${s.pbr}</div><div class="m-flag ${pbrFlag}">${s.pbr<1?'저평가':s.pbr>3?'고평가':'보통'}</div></div>
+      <div class="metric-box"><div class="m-label">PER</div><div class="m-val">${s.per||'N/A'}</div><div class="m-flag ${perFlag}">${s.per?(s.per<10?'저평가':s.per>30?'고평가':'보통'):'적자'}</div></div>
+      <div class="metric-box"><div class="m-label">ROE</div><div class="m-val">${s.roe}%</div><div class="m-flag ${roeFlag}">${s.roe>15?'우수':s.roe>5?'보통':'부진'}</div></div>
+      <div class="metric-box"><div class="m-label">부채비율</div><div class="m-val">${s.debt}%</div><div class="m-flag ${debtFlag}">${s.debt<50?'양호':s.debt<100?'주의':'위험'}</div></div>
+      <div class="metric-box"><div class="m-label">EV/EBITDA</div><div class="m-val">${s.ev||'N/A'}</div><div class="m-flag ${s.ev&&s.ev<8?'good':'warn'}">${s.ev?(s.ev<8?'저평가':'보통'):'N/A'}</div></div>
+      <div class="metric-box"><div class="m-label">배당수익률</div><div class="m-val">${s.div}%</div><div class="m-flag ${divFlag}">${s.div>3?'매력':s.div>1?'보통':'낮음'}</div></div>
+      <div class="metric-box"><div class="m-label">52주대비</div><div class="m-val">${s.w52>=0?'+':''}${s.w52}%</div><div class="m-flag ${w52Flag}">${s.w52<=-30?'낙폭과대':s.w52>=30?'고점권':'보통'}</div></div>
+      <div class="metric-box"><div class="m-label">외인순매수</div><div class="m-val" style="font-size:11px">${s.foreign}</div><div class="m-flag ${forFlag}">${s.foreign.startsWith('+')?'유입':'유출'}</div></div>
+    </div>
+    <div class="risk-row">
+      <div class="risk-box">
+        <div class="risk-label">단기 추천 (1~5일)</div>
+        <div class="risk-score">
+          <div class="risk-dots">${[1,2,3,4,5].map(i=>`<div class="rdot ${i<=Math.round(s.shortScore)?'fill-short':'empty-r'}"></div>`).join('')}</div>
+          <span class="risk-num" style="color:var(--green)">${s.shortScore.toFixed(1)}</span>
+        </div>
+      </div>
+      <div class="risk-box">
+        <div class="risk-label">중기 추천 (1~3개월)</div>
+        <div class="risk-score">
+          <div class="risk-dots">${[1,2,3,4,5].map(i=>`<div class="rdot ${i<=Math.round(s.midScore)?'fill-mid':'empty-r'}"></div>`).join('')}</div>
+          <span class="risk-num" style="color:var(--amber)">${s.midScore.toFixed(1)}</span>
+        </div>
+      </div>
+    </div>
+    <div class="ai-reason">
+      <div class="ai-label">🤖 AI 분석 판단근거</div>
+      <div id="ai-text-${s.id}"><div class="ai-loading"><div class="spinner"></div> Claude AI 분석 중...</div></div>
+    </div>
+    <div class="tags">${s.tags.map(t=>`<span class="tag ${tagColor(t)}">${t}</span>`).join('')}</div>`;
+}
+
+function tagColor(t) {
+  if(['낙폭과대','PBR저평가','저PBR','저PER'].some(k=>t.includes(k.replace('저',''))||t===k)) return 'tag-green';
+  if(['외인','수혜','AI','HBM','수출','성장','1위'].some(k=>t.includes(k))) return 'tag-blue';
+  if(['리스크','부진','할인','적자','부담','부진'].some(k=>t.includes(k))) return 'tag-red';
+  if(['배당','구조','전환','합병'].some(k=>t.includes(k))) return 'tag-amber';
+  return 'tag-purple';
+}
+
+function renderNews(s) {
+  return s.news.map(n=>`
+    <div class="news-item">
+      <div class="news-title">${n.t}</div>
+      <div class="news-meta">
+        <span>${n.src}</span><span>${n.time}</span>
+        <span class="sent-badge ${n.sent==='pos'?'sent-pos':n.sent==='neg'?'sent-neg':'sent-neu'}">${n.sent==='pos'?'긍정':n.sent==='neg'?'부정':'중립'}</span>
+      </div>
+    </div>`).join('');
+}
+
+function renderMemo(s) {
+  const saved = memos[s.id] || '';
+  return `
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px">개인 투자 메모 (로컬 저장)</div>
+    <textarea class="memo-area" id="memo-${s.id}" rows="5" placeholder="매수 이유, 목표가, 손절선 등 자유롭게 기록하세요...">${saved}</textarea>
+    <button class="save-btn" onclick="saveMemo('${s.id}')">저장</button>`;
+}
+
+function renderScoreHistory(s) {
+  return `
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">최근 5일 점수 · 종가 · 수익률</div>
+    <div style="overflow-x:auto;margin-bottom:10px;">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead>
+          <tr style="border-bottom:0.5px solid var(--border);background:var(--bg3);">
+            <th style="padding:6px 10px;text-align:left;font-weight:500;color:var(--text3)">날짜</th>
+            <th style="padding:6px 8px;text-align:center;font-weight:500;color:var(--text3)">점수</th>
+            <th style="padding:6px 8px;text-align:right;font-weight:500;color:var(--text3);white-space:nowrap">당일 종가</th>
+            <th style="padding:6px 8px;text-align:right;font-weight:500;color:var(--text3);white-space:nowrap">익일 종가</th>
+            <th style="padding:6px 10px;text-align:right;font-weight:500;color:var(--text3)">수익률</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${s.history.map((h,i)=>{
+            const isToday = i===s.history.length-1;
+            const retColor = !h.ret?'var(--text3)':h.ret.startsWith('+')?'var(--red)':'var(--blue)';
+            return `<tr style="border-bottom:0.5px solid var(--border);${isToday?'background:var(--bg3);':''}">
+              <td style="padding:7px 10px;font-family:'JetBrains Mono',monospace;color:${isToday?'var(--blue)':'var(--text2)'}">${h.d}${isToday?' 🔵':''}</td>
+              <td style="padding:7px 8px;text-align:center;font-family:'JetBrains Mono',monospace;font-weight:600;color:${barColor(h.score)}">${h.score.toFixed(1)}</td>
+              <td style="padding:7px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${h.close.toLocaleString()}원</td>
+              <td style="padding:7px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text2)">${h.nextClose?h.nextClose.toLocaleString()+'원':'—'}</td>
+              <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600;color:${retColor}">${h.ret||'—'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:11px;color:var(--text3)">※ KIS API 연결 후 실제 종가·수익률 자동 기록됩니다</div>`;
+}
+
+function renderWatchlist(el) {
+  if(watchlist.length===0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-text">관심 종목이 없습니다<br>종목 카드의 ★을 눌러 추가하세요</div></div>';
+    return;
+  }
+  const all = [...KOSPI_STOCKS, ...KOSDAQ_STOCKS];
+  const watched = watchlist.map(id => all.find(s=>s.id===id)).filter(Boolean);
+  el.innerHTML = watched.map((s,i) => renderStockCard(s, i+1)).join('');
+}
+
+function renderHistory(el) {
+  const all = [...KOSPI_STOCKS, ...KOSDAQ_STOCKS];
+
+  // compute per-stock avg return for scored days
+  function avgRet(s) {
+    const scored = s.history.filter(h=>h.ret!==null);
+    if(!scored.length) return null;
+    const sum = scored.reduce((a,h)=>a+parseFloat(h.ret),0);
+    return (sum/scored.length).toFixed(2);
+  }
+
+  el.innerHTML = `
+    <div style="padding:14px 0 10px;font-size:11px;color:var(--text3)">종목별 점수 · 종가 · 수익률 기록 (최근 5일)</div>
+    ${all.map(s=>{
+      const avg = avgRet(s);
+      const avgColor = avg===null?'var(--text3)':parseFloat(avg)>=0?'var(--red)':'var(--blue)';
+      return `
+      <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:0;margin-bottom:10px;overflow:hidden;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px 8px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:700;font-size:13px">${s.name}</span>
+            <span style="font-size:10px;color:var(--text3)">${s.id}</span>
+            <span style="font-size:10px;padding:1px 6px;background:var(--bg4);border:0.5px solid var(--border);border-radius:4px;color:var(--text2)">${s.sector}</span>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:10px;color:var(--text3)">평균수익률</div>
+            <div style="font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;color:${avgColor}">${avg!==null?(parseFloat(avg)>=0?'+':'')+avg+'%':'—'}</div>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <thead>
+              <tr style="border-top:0.5px solid var(--border);border-bottom:0.5px solid var(--border);background:var(--bg3);">
+                <th style="padding:6px 14px;text-align:left;font-weight:500;color:var(--text3);white-space:nowrap">날짜</th>
+                <th style="padding:6px 8px;text-align:center;font-weight:500;color:var(--text3)">점수</th>
+                <th style="padding:6px 8px;text-align:right;font-weight:500;color:var(--text3);white-space:nowrap">당일 종가</th>
+                <th style="padding:6px 8px;text-align:right;font-weight:500;color:var(--text3);white-space:nowrap">익일 종가</th>
+                <th style="padding:6px 14px;text-align:right;font-weight:500;color:var(--text3)">수익률</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${s.history.map((h,i)=>{
+                const retColor = !h.ret?'var(--text3)':h.ret.startsWith('+')?'var(--red)':'var(--blue)';
+                const isToday = i===s.history.length-1;
+                return `<tr style="border-bottom:0.5px solid var(--border);${isToday?'background:var(--bg3);':''}" >
+                  <td style="padding:7px 14px;font-family:'JetBrains Mono',monospace;color:${isToday?'var(--blue)':'var(--text2)'};white-space:nowrap">${h.d}${isToday?' 🔵':''}</td>
+                  <td style="padding:7px 8px;text-align:center;">
+                    <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:${barColor(h.score)}">${h.score.toFixed(1)}</span>
+                  </td>
+                  <td style="padding:7px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text)">${h.close.toLocaleString()}원</td>
+                  <td style="padding:7px 8px;text-align:right;font-family:'JetBrains Mono',monospace;color:var(--text2)">${h.nextClose?h.nextClose.toLocaleString()+'원':'—'}</td>
+                  <td style="padding:7px 14px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600;color:${retColor}">${h.ret||'—'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`}).join('')}
+    <div style="font-size:11px;color:var(--text3);text-align:center;padding:12px 0 20px">KIS API 연결 후 실제 종가·수익률 자동 기록됩니다</div>`;
+}
+
+// ── Actions ───────────────────────────────────────────────────────
+function toggleExpand(id) {
+  expandedId = expandedId === id ? null : id;
+  renderList();
+  if(expandedId) {
+    setTimeout(() => {
+      const card = document.getElementById(`card-${id}`);
+      if(card) card.scrollIntoView({behavior:'smooth', block:'nearest'});
+      loadAiAnalysis(id);
+    }, 100);
+  }
+}
+
+function switchDetailTab(e, id, idx) {
+  e.stopPropagation();
+  expandedDetailTab[id] = idx;
+  renderList();
+  if(idx===0) setTimeout(()=>loadAiAnalysis(id), 100);
+}
+
+function toggleWatch(e, id) {
+  e.stopPropagation();
+  if(watchlist.includes(id)) watchlist = watchlist.filter(i=>i!==id);
+  else watchlist.push(id);
+  localStorage.setItem('watchlist', JSON.stringify(watchlist));
+  renderList();
+}
+
+function saveMemo(id) {
+  const val = document.getElementById(`memo-${id}`)?.value || '';
+  memos[id] = val;
+  localStorage.setItem('memos', JSON.stringify(memos));
+  const btn = document.querySelector(`#card-${id} .save-btn`);
+  if(btn) { btn.textContent = '저장됨 ✓'; setTimeout(()=>{ btn.textContent='저장'; },1500); }
+}
+
+function openNoti() { document.getElementById('notiModal').classList.add('open'); }
+function closeNoti(e) { if(e.target===document.getElementById('notiModal')) document.getElementById('notiModal').classList.remove('open'); }
+function toggleNoti(el) { el.classList.toggle('on'); }
+
+// ── Claude AI Analysis ────────────────────────────────────────────
+const aiCache = {};
+
+async function loadAiAnalysis(stockId) {
+  const el = document.getElementById(`ai-text-${stockId}`);
+  if(!el) return;
+  if(aiCache[stockId]) { el.innerHTML = aiCache[stockId]; return; }
+
+  const all = [...KOSPI_STOCKS, ...KOSDAQ_STOCKS];
+  const s = all.find(x=>x.id===stockId);
+  if(!s) return;
+
+  el.innerHTML = '<div class="ai-loading"><div class="spinner"></div> Claude AI 분석 중...</div>';
+
+  const prompt = `당신은 한국 주식 전문 애널리스트입니다. 다음 종목 데이터를 바탕으로 단기(1~5일) 투자 판단 근거를 3~4문장으로 간결하게 한국어로 설명하세요. 수치 근거를 포함하고 리스크도 언급하세요. 마크다운 사용 금지.
+
+종목: ${s.name}(${s.id}) / 섹터: ${s.sector}
+PBR: ${s.pbr} / PER: ${s.per||'N/A'} / ROE: ${s.roe}% / 부채비율: ${s.debt}%
+52주대비: ${s.w52}% / 배당수익률: ${s.div}% / 외인순매수: ${s.foreign}
+당일등락: ${s.chg}% / 단기추천: ${s.shortScore}점 / 중기추천: ${s.midScore}점
+주요뉴스: ${s.news.map(n=>n.t).join(' | ')}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const text = data.content?.find(c=>c.type==='text')?.text || '분석 결과를 불러올 수 없습니다.';
+    aiCache[stockId] = text;
+    if(document.getElementById(`ai-text-${stockId}`)) {
+      document.getElementById(`ai-text-${stockId}`).innerHTML = text;
+    }
+  } catch(err) {
+    if(el) el.innerHTML = '네트워크 오류로 분석을 불러올 수 없습니다.';
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+renderList();
+initApiStatus();
+</script>
+</body>
+</html>
