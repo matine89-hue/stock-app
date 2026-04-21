@@ -528,28 +528,63 @@ async function fetchLiveData() {
     var kospiRaw  = await fetchVolumeRanking('KOSPI');
     var kosdaqRaw = await fetchVolumeRanking('KOSDAQ');
 
-    if (kospiRaw.length > 0) {
-      kospiRaw.forEach(function(item, i) {
-        if (KOSPI_STOCKS[i]) {
-          KOSPI_STOCKS[i].id    = item.mksc_shrn_iscd || KOSPI_STOCKS[i].id;
-          KOSPI_STOCKS[i].name  = item.hts_kor_isnm   || KOSPI_STOCKS[i].name;
-          KOSPI_STOCKS[i].price = parseInt(item.stck_prpr  || 0) || KOSPI_STOCKS[i].price;
-          KOSPI_STOCKS[i].chg   = parseFloat(item.prdy_ctrt || 0) || KOSPI_STOCKS[i].chg;
-          KOSPI_STOCKS[i].vol   = parseInt(item.acml_vol || 0).toLocaleString() + '주';
-        }
+    // 종목코드 기준으로 매핑 — 샘플 순서에 의존하지 않음
+    function applyLiveData(rawList, stockArr) {
+      // 1) 기존 샘플 종목코드 맵 생성
+      var sampleMap = {};
+      stockArr.forEach(function(s) { sampleMap[s.id] = s; });
+
+      // 2) 실제 데이터를 새 배열로 구성
+      var newArr = rawList.map(function(item) {
+        var code  = item.mksc_shrn_iscd || '';
+        var name  = item.hts_kor_isnm   || '';
+        var price = parseInt(item.stck_prpr  || 0);
+        var chg   = parseFloat(item.prdy_ctrt || 0);
+        var vol   = parseInt(item.acml_vol || 0).toLocaleString() + '주';
+        var w52pct = parseFloat(item.d250_hgpr_vrss_prpr_rate || 0); // 52주 대비
+
+        // 같은 종목코드가 샘플에 있으면 재무/소개 등 유지, 없으면 기본값
+        var base = sampleMap[code] || {
+          sector: item.rprs_mrkt_kor_name || '기타',
+          intro: name + ' — 실시간 거래량 상위 종목입니다.',
+          tags: ['거래량상위'],
+          news: [],
+          history: [],
+          pbr: 0, per: 0, roe: 0, debt: 0, ev: 0, div: 0,
+          foreign: '—',
+          shortScore: 3.0, midScore: 3.0
+        };
+
+        return Object.assign({}, base, {
+          id: code,
+          name: name,
+          price: price || base.price || 0,
+          chg: chg,
+          vol: vol,
+          w52: w52pct || base.w52 || 0,
+          // intro/tags/news/sector는 샘플 종목이면 유지, 신규면 기본값
+          intro: base.intro,
+          tags: base.tags,
+          news: base.news,
+          sector: base.sector,
+        });
       });
+      return newArr;
+    }
+
+    if (kospiRaw.length > 0) {
+      var updated = applyLiveData(kospiRaw, KOSPI_STOCKS);
+      KOSPI_STOCKS.length = 0;
+      updated.forEach(function(s){ KOSPI_STOCKS.push(s); });
     }
     if (kosdaqRaw.length > 0) {
-      kosdaqRaw.forEach(function(item, i) {
-        if (KOSDAQ_STOCKS[i]) {
-          KOSDAQ_STOCKS[i].id    = item.mksc_shrn_iscd || KOSDAQ_STOCKS[i].id;
-          KOSDAQ_STOCKS[i].name  = item.hts_kor_isnm   || KOSDAQ_STOCKS[i].name;
-          KOSDAQ_STOCKS[i].price = parseInt(item.stck_prpr  || 0) || KOSDAQ_STOCKS[i].price;
-          KOSDAQ_STOCKS[i].chg   = parseFloat(item.prdy_ctrt || 0) || KOSDAQ_STOCKS[i].chg;
-          KOSDAQ_STOCKS[i].vol   = parseInt(item.acml_vol || 0).toLocaleString() + '주';
-        }
-      });
+      var updated2 = applyLiveData(kosdaqRaw, KOSDAQ_STOCKS);
+      KOSDAQ_STOCKS.length = 0;
+      updated2.forEach(function(s){ KOSDAQ_STOCKS.push(s); });
     }
+
+    // 캐시 초기화 (종목 바뀌었으니 AI 분석 다시 받아야 함)
+    Object.keys(aiCache).forEach(function(k){ delete aiCache[k]; });
 
     renderList();
     setFetchStatus('var(--green)', '✓ 업데이트 완료 (' + new Date().toLocaleTimeString('ko-KR') + ')');
