@@ -361,7 +361,7 @@ let KIS_ACCESS_TOKEN = localStorage.getItem('kis_access_token') || '';
 let KIS_TOKEN_EXPIRED = localStorage.getItem('kis_token_expired') || '';
 
 // 프록시 엔드포인트 — Netlify Function
-const PROXY_URL = '/.netlify/functions/kis-proxy';
+const PROXY_URL = '/api/kis-proxy';
 
 // ── 프록시를 통한 API 호출 헬퍼 ──────────────────────────────────
 async function kisProxy(action, extraParams = {}) {
