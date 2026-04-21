@@ -352,191 +352,213 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 <!-- Notification settings moved to Settings tab -->
 
 <script>
-// ── KIS API Config ────────────────────────────────────────────────
-// 제미나이 검증 방식 — 토큰 직접 저장/사용, 단순 구조
-let KIS_APP_KEY    = localStorage.getItem('k') || '';
-let KIS_APP_SECRET = localStorage.getItem('s') || '';
-let KIS_ACCESS_TOKEN = localStorage.getItem('t') || '';
-
+// ═══════════════════════════════════════════════════════
+// KIS API — 설정/토큰/데이터 (완전 재작성 v1.1)
+// ═══════════════════════════════════════════════════════
 const PROXY_URL = '/api/kis-proxy';
 
-// ── 토큰 발급 (설정 탭 버튼) ──────────────────────────────────────
-async function saveAndConnect() {
-  const key = document.getElementById('inputAppKey').value.trim();
-  const sec = document.getElementById('inputAppSecret').value.trim();
-  const statusEl = document.getElementById('fetchStatus');
+// ── 상태 표시 (누락됐던 함수 복구) ────────────────────
+function updateApiStatus(state, msg) {
+  var dot  = document.getElementById('apiStatusDot');
+  var txt  = document.getElementById('apiStatusText');
+  if (!dot || !txt) return;
+  var colors = { ok:'var(--green)', error:'var(--red)', loading:'var(--amber)', none:'var(--text3)' };
+  dot.style.background = colors[state] || colors.none;
+  if (state === 'loading') dot.style.animation = 'pulse 1s infinite';
+  else dot.style.animation = '';
+  txt.textContent = msg;
+  txt.style.color = colors[state] || 'var(--text2)';
+}
 
-  // 상태 표시 헬퍼
-  function setStatus(color, html) {
-    updateApiStatus(color === 'var(--green)' ? 'ok' : color === 'var(--red)' ? 'error' : 'loading', html.replace(/<[^>]*>/g,'').slice(0,40));
-    if (statusEl) { statusEl.style.color = color; statusEl.innerHTML = html; }
-  }
+// ── 설정 패널 상태바 표시용 ────────────────────────────
+function setFetchStatus(color, html) {
+  var el = document.getElementById('fetchStatus');
+  if (!el) return;
+  el.style.color  = color;
+  el.innerHTML    = html;
+}
 
-  if (!key || !sec) { setStatus('var(--red)', '⚠️ App Key와 Secret을 모두 입력하세요'); return; }
+// ── API 초기화 (페이지 로딩 시) ────────────────────────
+function initApiStatus() {
+  var key    = localStorage.getItem('k') || '';
+  var token  = localStorage.getItem('t') || '';
+  var keyEl  = document.getElementById('inputAppKey');
+  var secEl  = document.getElementById('inputAppSecret');
+  var info   = document.getElementById('apiTokenInfo');
 
-  setStatus('var(--amber)', '🔄 연결 중... (5~10초 소요)');
+  if (keyEl && key) keyEl.placeholder = 'App Key 저장됨 (' + key.slice(0,8) + '...)';
+  if (secEl && key) secEl.placeholder = 'App Secret 저장됨';
 
-  try {
-    // 1단계: fetch 호출 자체가 되는지 확인
-    let res;
-    try {
-      res = await fetch(PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'getToken', appkey: key, appsecret: sec })
-      });
-    } catch(fetchErr) {
-      setStatus('var(--red)',
-        '❌ 네트워크 오류 — 프록시 서버에 도달 못함<br>' +
-        '원인: ' + fetchErr.message + '<br>' +
-        '→ Vercel에 api/kis-proxy.js 배포됐는지 확인');
-      return;
-    }
-
-    // 2단계: HTTP 상태코드 확인
-    const rawText = await res.text();
-    if (!res.ok) {
-      setStatus('var(--red)',
-        '❌ 프록시 서버 오류 (HTTP ' + res.status + ')<br>' +
-        '응답: ' + rawText.slice(0, 200) + '<br>' +
-        '→ Vercel Functions 로그 확인 필요');
-      return;
-    }
-
-    // 3단계: JSON 파싱
-    let d;
-    try {
-      d = JSON.parse(rawText);
-    } catch(jsonErr) {
-      setStatus('var(--red)',
-        '❌ 응답 파싱 오류<br>' +
-        '받은 내용: ' + rawText.slice(0, 200));
-      return;
-    }
-
-    // 4단계: 토큰 확인
-    if (d.access_token) {
-      localStorage.setItem('k', key);
-      localStorage.setItem('s', sec);
-      localStorage.setItem('t', d.access_token);
-      KIS_APP_KEY = key;
-      KIS_APP_SECRET = sec;
-      KIS_ACCESS_TOKEN = d.access_token;
-
-      const expStr = d.access_token_token_expired
-        ? new Date(d.access_token_token_expired).toLocaleString('ko-KR')
-        : '24시간';
-      document.getElementById('inputAppKey').value = '';
-      document.getElementById('inputAppSecret').value = '';
-      const info = document.getElementById('apiTokenInfo');
-      if (info) { info.style.display='block'; info.textContent='연결됨 · Key: '+key.slice(0,8)+'...'; }
-      setStatus('var(--green)', '✅ 토큰 발급 완료!  만료: ' + expStr + '<br>이제 실시간 데이터 불러오기를 눌러보세요.');
-    } else {
-      // KIS 서버가 토큰 거부한 경우 — 실제 에러 메시지 표시
-      const kisMsg = d.msg1 || d.message || '';
-      const kisCode = d.rt_cd || d.error_code || '';
-      setStatus('var(--red)',
-        '❌ KIS 토큰 발급 거부<br>' +
-        (kisCode ? '코드: ' + kisCode + '  ' : '') +
-        (kisMsg ? '사유: ' + kisMsg + '<br>' : '') +
-        '전체 응답: ' + JSON.stringify(d).slice(0, 150) + '<br>' +
-        '→ ① 실전투자 키인지 확인  ② 키 복사 시 공백 없는지 확인');
-    }
-  } catch(e) {
-    setStatus('var(--red)', '❌ 예외 발생: ' + e.message);
+  if (!key) {
+    updateApiStatus('none', 'API 키 미설정');
+  } else if (token) {
+    updateApiStatus('ok', '연결됨 · ' + key.slice(0,8) + '...');
+    if (info) { info.style.display = 'block'; info.textContent = '토큰 보유 중 — 데이터 불러오기 가능'; }
+  } else {
+    updateApiStatus('error', '토큰 없음 — 토큰 발급 필요');
   }
 }
 
-// ── 연결 상태 초기화 ───────────────────────────────────────────────
-function initApiStatus() {
-  // 저장된 키 입력창에 미리 채우기 (제미나이 방식)
-  const keyEl = document.getElementById('inputAppKey');
-  const secEl = document.getElementById('inputAppSecret');
-  if (keyEl && KIS_APP_KEY) keyEl.placeholder = 'App Key 저장됨 (' + KIS_APP_KEY.slice(0,8) + '...)';
-  if (secEl && KIS_APP_SECRET) secEl.placeholder = 'App Secret 저장됨';
+// ── 키 초기화 ──────────────────────────────────────────
+function clearKeys() {
+  if (!confirm('저장된 API 키와 토큰을 삭제할까요?')) return;
+  localStorage.removeItem('k');
+  localStorage.removeItem('s');
+  localStorage.removeItem('t');
+  updateApiStatus('none', 'API 키 미설정');
+  setFetchStatus('var(--text3)', '');
+  var info = document.getElementById('apiTokenInfo');
+  if (info) { info.style.display = 'none'; }
+}
 
-  if (!KIS_APP_KEY) {
-    updateApiStatus('none', 'API 키 미설정');
+// ── 토큰 발급 ──────────────────────────────────────────
+async function saveAndConnect() {
+  var keyEl = document.getElementById('inputAppKey');
+  var secEl = document.getElementById('inputAppSecret');
+  var key   = keyEl ? keyEl.value.trim() : '';
+  var sec   = secEl ? secEl.value.trim() : '';
+
+  if (!key || !sec) {
+    updateApiStatus('error', '키 미입력');
+    setFetchStatus('var(--red)', '⚠️ App Key와 App Secret을 모두 입력하세요.');
     return;
   }
-  if (KIS_ACCESS_TOKEN) {
-    updateApiStatus('ok', '연결됨 · Key: ' + KIS_APP_KEY.slice(0,8) + '...');
-    const info = document.getElementById('apiTokenInfo');
-    if (info) { info.style.display='block'; info.textContent='토큰 보유 중 — 실시간 데이터 불러오기 가능'; }
-  } else {
-    updateApiStatus('error', '토큰 없음 — 저장 및 토큰 발급 필요');
-  }
-}
 
-async function fetchVolumeRanking(market) {
-  const token = localStorage.getItem('t');
-  const appkey = localStorage.getItem('k');
-  const appsecret = localStorage.getItem('s');
-  if (!token || !appkey) return [];
+  updateApiStatus('loading', '토큰 발급 중...');
+  setFetchStatus('var(--amber)', '🔄 KIS 서버에 연결 중... (5~10초)');
+
+  var res, rawText, d;
+
+  // 1단계: fetch 도달 확인
   try {
-    const res = await fetch(PROXY_URL, {
+    res = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'volumeRank', market, token, appkey, appsecret })
+      body: JSON.stringify({ action: 'getToken', appkey: key, appsecret: sec })
     });
-    const data = await res.json();
-    if (!data || !data.output) { console.warn('[거래량순위] 응답없음', JSON.stringify(data)); return []; }
-    return data.output.slice(0, 10);
-  } catch(e) { console.error('[거래량순위 오류]', e.message); return []; }
-}
-
-async function fetchLiveData() {
-  const btn = document.getElementById('fetchBtn');
-  const status = document.getElementById('fetchStatus');
-  // 제미나이 방식 — 저장된 토큰 직접 사용
-  const token = localStorage.getItem('t');
-  const appkey = localStorage.getItem('k');
-  const appsecret = localStorage.getItem('s');
-  if(!token || !appkey) { status.textContent='⚠️ 먼저 설정에서 연결 및 토큰 발급을 해주세요.'; status.style.color='var(--red)'; return; }
-  btn.textContent = '⏳ 불러오는 중...';
-  btn.disabled = true;
-  status.style.color='var(--text3)';
-  status.textContent = '거래량 상위 종목 조회 중...';
-  try {
-    const kospiRaw = await fetchVolumeRanking('KOSPI');
-    const kosdaqRaw = await fetchVolumeRanking('KOSDAQ');
-    status.textContent = `코스피 ${kospiRaw.length}개, 코스닥 ${kosdaqRaw.length}개 종목 수신. 상세 정보 조회 중...`;
-    // 실제 데이터로 KOSPI_STOCKS / KOSDAQ_STOCKS 업데이트
-    // (실제 운영 시 각 종목별 세부 조회로 채움 — 현재는 거래량 순위 데이터로 이름/코드/거래량 업데이트)
-    if(kospiRaw.length > 0) {
-      kospiRaw.forEach((item, i) => {
-        if(KOSPI_STOCKS[i]) {
-          KOSPI_STOCKS[i].id = item.mksc_shrn_iscd || KOSPI_STOCKS[i].id;
-          KOSPI_STOCKS[i].name = item.hts_kor_isnm || KOSPI_STOCKS[i].name;
-          KOSPI_STOCKS[i].price = parseInt(item.stck_prpr||0) || KOSPI_STOCKS[i].price;
-          KOSPI_STOCKS[i].chg = parseFloat(item.prdy_ctrt||0) || KOSPI_STOCKS[i].chg;
-          KOSPI_STOCKS[i].vol = parseInt(item.acml_vol||0).toLocaleString()+'주';
-        }
-      });
-    }
-    if(kosdaqRaw.length > 0) {
-      kosdaqRaw.forEach((item, i) => {
-        if(KOSDAQ_STOCKS[i]) {
-          KOSDAQ_STOCKS[i].id = item.mksc_shrn_iscd || KOSDAQ_STOCKS[i].id;
-          KOSDAQ_STOCKS[i].name = item.hts_kor_isnm || KOSDAQ_STOCKS[i].name;
-          KOSDAQ_STOCKS[i].price = parseInt(item.stck_prpr||0) || KOSDAQ_STOCKS[i].price;
-          KOSDAQ_STOCKS[i].chg = parseFloat(item.prdy_ctrt||0) || KOSDAQ_STOCKS[i].chg;
-          KOSDAQ_STOCKS[i].vol = parseInt(item.acml_vol||0).toLocaleString()+'주';
-        }
-      });
-    }
-    renderList();
-    const now = new Date().toLocaleTimeString('ko-KR');
-    status.textContent = `✓ 업데이트 완료 (${now})`;
-    status.style.color = 'var(--green)';
-  } catch(e) {
-    status.textContent = '오류: ' + e.message;
-    status.style.color = 'var(--red)';
+  } catch (e) {
+    updateApiStatus('error', '네트워크 오류');
+    setFetchStatus('var(--red)',
+      '❌ 프록시 서버 도달 실패<br>' +
+      '오류: ' + e.message + '<br>' +
+      '→ Vercel에 api/kis-proxy.js 가 배포됐는지 확인하세요.');
+    return;
   }
-  btn.textContent = '📡 실시간 데이터 불러오기';
-  btn.disabled = false;
+
+  // 2단계: HTTP 상태 확인
+  try { rawText = await res.text(); } catch(e) { rawText = ''; }
+  if (!res.ok) {
+    updateApiStatus('error', 'HTTP ' + res.status);
+    setFetchStatus('var(--red)',
+      '❌ 서버 오류 HTTP ' + res.status + '<br>' +
+      '응답: ' + rawText.slice(0, 200) + '<br>' +
+      '→ Vercel 대시보드 Functions 로그를 확인하세요.');
+    return;
+  }
+
+  // 3단계: JSON 파싱
+  try { d = JSON.parse(rawText); } catch(e) {
+    updateApiStatus('error', 'JSON 오류');
+    setFetchStatus('var(--red)', '❌ 응답 파싱 실패: ' + rawText.slice(0, 150));
+    return;
+  }
+
+  // 4단계: 토큰 확인
+  if (d && d.access_token) {
+    localStorage.setItem('k', key);
+    localStorage.setItem('s', sec);
+    localStorage.setItem('t', d.access_token);
+
+    if (keyEl) keyEl.value = '';
+    if (secEl) secEl.value = '';
+
+    var expStr = d.access_token_token_expired
+      ? new Date(d.access_token_token_expired).toLocaleString('ko-KR')
+      : '24시간';
+    updateApiStatus('ok', '연결 성공 · ' + key.slice(0,8) + '...');
+    var info = document.getElementById('apiTokenInfo');
+    if (info) { info.style.display = 'block'; info.textContent = '토큰 만료: ' + expStr; }
+    setFetchStatus('var(--green)', '✅ 토큰 발급 완료! 만료: ' + expStr + '<br>이제 실시간 데이터 불러오기를 누르세요.');
+  } else {
+    var code = (d && (d.rt_cd || d.error_code)) || '';
+    var msg  = (d && (d.msg1 || d.message)) || '';
+    updateApiStatus('error', '발급 거부');
+    setFetchStatus('var(--red)',
+      '❌ KIS 토큰 거부<br>' +
+      (code ? '코드: ' + code + '<br>' : '') +
+      (msg  ? '사유: ' + msg  + '<br>' : '') +
+      '전체: ' + JSON.stringify(d).slice(0, 150) + '<br>' +
+      '→ 실전투자 키인지, 공백 없는지 확인');
+  }
 }
 
+// ── 거래량 순위 조회 ───────────────────────────────────
+async function fetchVolumeRanking(market) {
+  var token    = localStorage.getItem('t') || '';
+  var appkey   = localStorage.getItem('k') || '';
+  var appsecret = localStorage.getItem('s') || '';
+  if (!token || !appkey) return [];
+  try {
+    var res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'volumeRank', market: market, token: token, appkey: appkey, appsecret: appsecret })
+    });
+    var data = await res.json();
+    if (!data || !data.output) return [];
+    return data.output.slice(0, 10);
+  } catch(e) { return []; }
+}
+
+// ── 실시간 데이터 불러오기 ────────────────────────────
+async function fetchLiveData() {
+  var btn    = document.getElementById('fetchBtn');
+  var token  = localStorage.getItem('t') || '';
+  var appkey = localStorage.getItem('k') || '';
+
+  if (!token || !appkey) {
+    setFetchStatus('var(--red)', '⚠️ 먼저 토큰 발급을 해주세요.');
+    return;
+  }
+
+  if (btn) { btn.textContent = '⏳ 불러오는 중...'; btn.disabled = true; }
+  setFetchStatus('var(--text2)', '거래량 상위 종목 조회 중...');
+
+  try {
+    var kospiRaw  = await fetchVolumeRanking('KOSPI');
+    var kosdaqRaw = await fetchVolumeRanking('KOSDAQ');
+
+    if (kospiRaw.length > 0) {
+      kospiRaw.forEach(function(item, i) {
+        if (KOSPI_STOCKS[i]) {
+          KOSPI_STOCKS[i].id    = item.mksc_shrn_iscd || KOSPI_STOCKS[i].id;
+          KOSPI_STOCKS[i].name  = item.hts_kor_isnm   || KOSPI_STOCKS[i].name;
+          KOSPI_STOCKS[i].price = parseInt(item.stck_prpr  || 0) || KOSPI_STOCKS[i].price;
+          KOSPI_STOCKS[i].chg   = parseFloat(item.prdy_ctrt || 0) || KOSPI_STOCKS[i].chg;
+          KOSPI_STOCKS[i].vol   = parseInt(item.acml_vol || 0).toLocaleString() + '주';
+        }
+      });
+    }
+    if (kosdaqRaw.length > 0) {
+      kosdaqRaw.forEach(function(item, i) {
+        if (KOSDAQ_STOCKS[i]) {
+          KOSDAQ_STOCKS[i].id    = item.mksc_shrn_iscd || KOSDAQ_STOCKS[i].id;
+          KOSDAQ_STOCKS[i].name  = item.hts_kor_isnm   || KOSDAQ_STOCKS[i].name;
+          KOSDAQ_STOCKS[i].price = parseInt(item.stck_prpr  || 0) || KOSDAQ_STOCKS[i].price;
+          KOSDAQ_STOCKS[i].chg   = parseFloat(item.prdy_ctrt || 0) || KOSDAQ_STOCKS[i].chg;
+          KOSDAQ_STOCKS[i].vol   = parseInt(item.acml_vol || 0).toLocaleString() + '주';
+        }
+      });
+    }
+
+    renderList();
+    setFetchStatus('var(--green)', '✓ 업데이트 완료 (' + new Date().toLocaleTimeString('ko-KR') + ')');
+  } catch(e) {
+    setFetchStatus('var(--red)', '오류: ' + e.message);
+  }
+
+  if (btn) { btn.textContent = '📡 실시간 데이터 불러오기'; btn.disabled = false; }
+}
 // ── Data ──────────────────────────────────────────────────────────
 const KOSPI_STOCKS = [
   { id:'005930', name:'삼성전자', sector:'반도체', price:71200, chg:-1.8, vol:'9,823만', pbr:1.12, per:14.2, roe:8.3, debt:28, ev:8.1, div:2.4, w52:-18, foreign:'+120억', shortScore:4.0, midScore:4.5,
