@@ -1064,20 +1064,31 @@ PBR: ${s.pbr} / PER: ${s.per||'N/A'} / ROE: ${s.roe}% / 부채비율: ${s.debt}%
   }
 }
 
+// 페이지 로드 시 저장된 키를 안전하게 불러오는 로직
 window.addEventListener('DOMContentLoaded', () => {
+  // 1. 로컬 스토리지에서 데이터 가져오기
   const savedKey = localStorage.getItem('kis_app_key');
   const savedSec = localStorage.getItem('kis_app_secret');
 
+  // 2. 값이 있을 때만 실행
   if (savedKey && savedSec) {
-    // 저장된 키가 있다면 입력창에 미리 채워넣기
+    // 화면상의 입력칸 찾기 (ID가 다를 수 있으므로 둘 다 체크)
     const keyInput = document.getElementById('appkey') || document.getElementById('inputAppKey');
     const secInput = document.getElementById('appsecret') || document.getElementById('inputAppSecret');
     
-    if (keyInput) keyInput.value = savedKey;
-    if (secInput) secInput.value = savedSec;
-
-    // 자동으로 연결 시도 (선택 사항: 원치 않으시면 이 아랫줄은 지우셔도 됩니다)
-    saveAndConnect();
+    if (keyInput && secInput) {
+      keyInput.value = savedKey;
+      secInput.value = savedSec;
+      
+      // 3. 에러 방지를 위해 지연 실행 (0.5초 뒤에 연결 시도)
+      // 페이지의 다른 변수들이 모두 로드될 시간을 줍니다.
+      setTimeout(() => {
+        if (typeof saveAndConnect === 'function') {
+          console.log('저장된 키로 자동 연결을 시도합니다...');
+          saveAndConnect();
+        }
+      }, 500);
+    }
   }
 });
 
