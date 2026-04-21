@@ -1,6 +1,5 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
-
   const { action, appkey, appsecret, token, market } = req.body;
 
   try {
@@ -14,8 +13,11 @@ export default async function handler(req, res) {
     }
 
     if (action === 'volumeRank') {
-      const mkCode = market === 'KOSDAQ' ? '1001' : '0001';
-      const response = await fetch(`https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/ranking/volume?FID_COND_MRKT_DIV_CODE=J&FID_COND_SCR_DIV_CODE=20173&FID_INPUT_ISCD=${mkCode}&FID_DIV_CLS_CODE=0&FID_BLNG_CLS_CODE=0&FID_TRGT_CLS_CODE=0&FID_TRGT_EXLS_CLS_CODE=0&FID_INPUT_PRICE_1=&FID_INPUT_PRICE_2=&FID_VOL_CNT=&FID_INPUT_DATE_1=`, {
+      const isDaq = market === 'KOSDAQ';
+      // 장중 데이터 요청 (URL 끝에 파라미터 확인)
+      const url = `https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/ranking/volume?FID_COND_MRKT_DIV_CODE=J&FID_COND_SCR_DIV_CODE=20173&FID_INPUT_ISCD=${isDaq ? '1001' : '0001'}&FID_DIV_CLS_CODE=0&FID_BLNG_CLS_CODE=0&FID_TRGT_CLS_CODE=0&FID_TRGT_EXLS_CLS_CODE=0&FID_INPUT_PRICE_1=&FID_INPUT_PRICE_2=&FID_VOL_CNT=&FID_INPUT_DATE_1=`;
+      
+      const response = await fetch(url, {
         headers: {
           'content-type': 'application/json',
           'authorization': `Bearer ${token}`,
@@ -26,7 +28,6 @@ export default async function handler(req, res) {
         }
       });
       const result = await response.json();
-      // 데이터가 없어도 에러 대신 빈 배열이라도 넘겨줌
       return res.status(200).json(result);
     }
   } catch (e) {
