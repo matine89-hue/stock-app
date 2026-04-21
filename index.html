@@ -422,14 +422,13 @@ async function fetchVolumeRanking(market) {
 
 // ── 저장 및 토큰 발급 ─────────────────────────────────────────────
 async function saveAndConnect() {
-  const key = document.getElementById('inputAppKey').value.trim();
-  const sec = document.getElementById('inputAppSecret').value.trim();
+  // HTML 내의 실제 ID값(appkey, appsecret)을 확인하여 매칭했습니다.
+  const key = document.getElementById('appkey')?.value.trim() || document.getElementById('inputAppKey')?.value.trim();
+  const sec = document.getElementById('appsecret')?.value.trim() || document.getElementById('inputAppSecret')?.value.trim();
   const statusEl = document.getElementById('fetchStatus');
 
-  // 1. 입력값 검증 알림 추가
   if (!key || !sec) {
-    alert("⚠️ App Key와 Secret을 모두 입력해주세요."); 
-    updateApiStatus('error', '입력 부족');
+    alert('App Key와 Secret을 입력해주세요!');
     return;
   }
 
@@ -437,24 +436,34 @@ async function saveAndConnect() {
   localStorage.setItem('kis_app_key', key);
   localStorage.setItem('kis_app_secret', sec);
   
-  updateApiStatus('loading', '연결 시도 중...');
+  if(statusEl) statusEl.textContent = '🔄 연결 중...';
 
   try {
-    // 2. getAccessToken 호출 전 경로 재확인
-    // PROXY_URL 변수가 '/.netlify/functions/kis-proxy'인지 꼭 확인하세요!
-    const token = await getAccessToken();
+    // PROXY_URL을 직접 사용하여 경로 문제를 원천 봉쇄합니다.
+    const res = await fetch('/.netlify/functions/kis-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'getToken',
+        appkey: key,
+        appsecret: sec
+      })
+    });
+
+    if (!res.ok) throw new Error('서버 응답 오류: ' + res.status);
+
+    const data = await res.json();
     
-    if (token) {
-      alert("✅ 연결 성공! 이제 데이터를 불러올 수 있습니다.");
-      updateApiStatus('ok', '연결 성공');
+    if (data.access_token) {
+      alert('✅ 연결 성공! 이제 실시간 데이터를 불러올 수 있습니다.');
+      localStorage.setItem('kis_access_token', data.access_token);
+      if(statusEl) statusEl.textContent = '✓ 연결 성공';
     } else {
-      // 3. 실패 시 구체적인 가이드 팝업
-      alert("❌ 연결 실패!\n다음 사항을 확인하세요:\n1. App Key/Secret 정확성\n2. Netlify 함수 배포 상태\n3. 브라우저 캐시 삭제");
-      updateApiStatus('error', '연결 실패');
+      alert('❌ 발급 실패: ' + (data.msg1 || '키 정보를 확인하세요.'));
     }
   } catch(e) {
-    alert("⚠️ 시스템 오류 발생: " + e.message);
-    updateApiStatus('error', '오류: ' + e.message);
+    alert('⚠️ 오류 발생: ' + e.message);
+    console.error(e);
   }
 }
 
