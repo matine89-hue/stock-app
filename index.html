@@ -1064,6 +1064,26 @@ PBR: ${s.pbr} / PER: ${s.per||'N/A'} / ROE: ${s.roe}% / 부채비율: ${s.debt}%
   }
 }
 
+window.addEventListener('DOMContentLoaded', () => {
+  const savedKey = localStorage.getItem('kis_app_key');
+  const savedSec = localStorage.getItem('kis_app_secret');
+
+  if (savedKey && savedSec) {
+    // 저장된 키가 있다면 입력창에 미리 채워넣기
+    const keyInput = document.getElementById('appkey') || document.getElementById('inputAppKey');
+    const secInput = document.getElementById('appsecret') || document.getElementById('inputAppSecret');
+    
+    if (keyInput) keyInput.value = savedKey;
+    if (secInput) secInput.value = savedSec;
+
+    // 자동으로 연결 시도 (선택 사항: 원치 않으시면 이 아랫줄은 지우셔도 됩니다)
+    saveAndConnect();
+  }
+});
+
+
+
+  
 // ── Init ──────────────────────────────────────────────────────────
 renderList();
 initApiStatus();
