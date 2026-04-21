@@ -1069,23 +1069,22 @@ PBR: ${s.pbr} / PER: ${s.per||'N/A'} / ROE: ${s.roe}% / 부채비율: ${s.debt}%
 주요뉴스: ${s.news.map(n=>n.t).join(' | ')}`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    // Claude API는 브라우저 직접 호출 불가 → Vercel 프록시 경유
+    const res = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
-      })
+      body: JSON.stringify({ action: 'aiAnalysis', params: { prompt: prompt } })
     });
     const data = await res.json();
-    const text = data.content?.find(c=>c.type==='text')?.text || '분석 결과를 불러올 수 없습니다.';
+    const text = (data.content && data.content.find(function(c){ return c.type==='text'; }) || {}).text
+      || data.error
+      || '분석 결과를 불러올 수 없습니다.';
     aiCache[stockId] = text;
-    if(document.getElementById(`ai-text-${stockId}`)) {
-      document.getElementById(`ai-text-${stockId}`).innerHTML = text;
-    }
+    var el2 = document.getElementById('ai-text-' + stockId);
+    if (el2) el2.innerHTML = text;
   } catch(err) {
-    if(el) el.innerHTML = '네트워크 오류로 분석을 불러올 수 없습니다.';
+    var el2 = document.getElementById('ai-text-' + stockId);
+    if (el2) el2.innerHTML = '분석 오류: ' + err.message;
   }
 }
 
