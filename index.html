@@ -1,3 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>국장 스크리너</title>
+<style>
+:root { --bg: #0d0f14; --bg2: #1a1e28; --blue: #4a9eff; --text: #e8eaf0; --border: #2d3343; }
+body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 0; }
+.app { max-width: 500px; margin: 0 auto; padding-bottom: 80px; position: relative; min-height: 100vh; }
+
+/* Header & Tabs */
+.header { padding: 20px; display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px solid var(--border); }
+.tabs { display: flex; background: var(--bg2); margin: 15px; border-radius: 8px; padding: 4px; gap: 4px; }
+.tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; border-radius: 6px; font-size: 13px; color: #888; }
+.tab.active { background: #30364d; color: var(--blue); font-weight: bold; }
+
+/* Stock List */
+.list-container { padding: 0 15px; }
+.stock-card { background: var(--bg2); margin-bottom: 12px; border-radius: 10px; border: 1px solid var(--border); overflow: hidden; }
+.card-info { padding: 16px; cursor: pointer; }
+
+/* Detail Area (핵심!) */
+.detail-area { display: none; padding: 16px; background: #222736; border-top: 1px solid var(--border); }
+.detail-area.active { display: block; }
+
+input, textarea { width: 100%; background: #0d0f14; border: 1px solid var(--border); color: #fff; padding: 12px; margin-bottom: 10px; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+.btn-save { background: var(--blue); color: white; border: none; padding: 12px; border-radius: 6px; width: 100%; font-weight: bold; cursor: pointer; }
+
+/* Navigation */
+.nav { position: fixed; bottom: 0; width: 100%; max-width: 500px; display: flex; background: var(--bg2); border-top: 1px solid var(--border); z-index: 100; }
+.nav-item { flex: 1; text-align: center; padding: 15px; font-size: 12px; color: #888; cursor: pointer; }
+.nav-item.active { color: var(--blue); }
+
+.price-up { color: #ff5c5c; }
+.price-down { color: #4a9eff; }
+</style>
+</head>
+<body>
+<div class="app">
+<div class="header">
+<span>국장 스크리너</span>
+<span id="clock" style="font-family: monospace;">00:00:00</span>
+</div>
+
+<div class="tabs" id="mainTabs">
+<div class="tab active" onclick="changeMarket('KOSPI')">코스피</div>
+<div class="tab" onclick="changeMarket('KOSDAQ')">코스닥</div>
+<div class="tab" onclick="changeMarket('HISTORY')">점수기록</div>
+</div>
+
+<div id="listView" class="list-container">
+<div id="loading" style="text-align:center; padding:50px; color:#555;">데이터를 불러오는 중...</div>
+</div>
+
+<div id="settingsView" class="list-container" style="display:none; padding-top:20px;">
+<div style="background:var(--bg2); padding:20px; border-radius:10px;">
+<h3 style="margin-bottom:15px; font-size:16px;">버셀 프록시 설정</h3>
+<input type="password" id="appKey" placeholder="App Key 입력">
+<input type="password" id="appSecret" placeholder="App Secret 입력">
+<button class="btn-save" onclick="handleAuth()">연결 및 토큰 발급</button>
+<div id="authStatus" style="margin-top:10px; font-size:12px; text-align:center; color:#888;">상태: 대기 중</div>
+</div>
+<button class="btn-save" onclick="fetchData()" style="margin-top:15px; background:#222; border:1px solid var(--blue);">📡 실시간 데이터 새로고침</button>
+</div>
+
+<div class="nav">
+<div class="nav-item active" id="nav-screen" onclick="switchMain('screen')">📊 스크리너</div>
+<div class="nav-item" id="nav-set" onclick="switchMain('set')">⚙️ 설정</div>
+</div>
+</div>
+
+<script>
+let stocks = [];
+let currentMarket = 'KOSPI';
+let historyData = JSON.parse(localStorage.getItem('my_stock_history') || '{}');
+
+// 1. 메인 뷰 전환 (스크리너 vs 설정)
+function switchMain(mode) {
+document.getElementById('listView').style.display = mode === 'screen' ? 'block' : 'none';
+document.getElementById('mainTabs').style.display = mode === 'screen' ? 'flex' : 'none';
+document.getElementById('settingsView').style.display = mode === 'set' ? 'block' : 'none';
+
+document.getElementById('nav-screen').classList.toggle('active', mode === 'screen');
+document.getElementById('nav-set').classList.toggle('active', mode === 'set');
+}
+
+// 2. 마켓 탭 전환
+function changeMarket(m) {
+currentMarket = m;
+document.querySelectorAll('.tab').forEach(t => {
+t.classList.toggle('active', t.innerText.includes(m === 'HISTORY' ? '기록' : m));
+});
+render();
+}
+
+// 3. API 인증 (토큰 발급)
+async function handleAuth() {
+const key = document.getElementById('appKey').value.trim();
+const sec = document.getElementById('appSecret').value.trim();
+const status = document.getElementById('authStatus');
+
+status.innerText = "연결 중...";
+try {
+const res = await fetch('/api/kis-proxy', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ action: 'getToken', appkey: key, appsecret: sec })
+});
+const d = await res.json();
+if(d.access_token) {
+localStorage.setItem('k', key);
+localStorage.setItem('s', sec);
+localStorage.setItem('t', d.access_token);
+status.innerText = "✅ 연결 성공! 데이터를 새로고침 하세요.";
+} else { status.innerText = "❌ 인증 실패"; }
+} catch(e) { status.innerText = "❌ 에러: " + e.message; }
+}
+
+// 4. 데이터 수신
+        async function fetchData() {
+            const token = localStorage.getItem('t');
+            if(!token) return alert("설정에서 먼저 연결하세요.");
+
+            try {
+                const res = await fetch('/api/kis-proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'volumeRank', 
+                        market: currentMarket === 'HISTORY' ? 'KOSPI' : currentMarket,
+                        token: token, appkey: localStorage.getItem('k'), appsecret: localStorage.getItem('s')
+                    })
+                });
+                const d = await res.json();
+                if(d.output) {
+                    stocks = d.output;
+                    render();
+                    alert("최신 데이터를 가져왔습니다.");
+                    switchMain('screen');
+                }
+            } catch(e) { alert("데이터 수신 오류"); }
+     // index.html 내의 fetchData 함수를 이 내용으로 교체하거나 전체를 덮어씌워주세요.
+
 async function fetchData() {
     const token = localStorage.getItem('t'), key = localStorage.getItem('k'), sec = localStorage.getItem('s');
     if(!token) return alert("연결부터 하세요.");
@@ -8,18 +152,115 @@ async function fetchData() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'volumeRank', market: currentMarket, token, appkey: key, appsecret: sec })
         });
-        const d = await res.json();
         
-        // 데이터 추출 (다양한 응답 형태 대응)
-        const finalData = d.output || d.output1 || d; 
+        const rawText = await res.text(); // JSON으로 바꾸기 전 텍스트 그대로 읽기
+        alert("서버 응답 원문: " + rawText.substring(0, 300)); // 원문 300자만 팝업으로 확인
         
-        if(Array.isArray(finalData)) {
+        const d = JSON.parse(rawText);
+        const finalData = d.output || d.output1 || (Array.isArray(d) ? d : null);
+        
+        if(finalData && Array.isArray(finalData)) {
             stocks = finalData;
             render();
             switchMain('screen');
         } else {
-            // 상세 에러 확인용
-            alert("응답 성공했으나 리스트가 없음: " + JSON.stringify(d).substring(0, 50));
+            alert("데이터 추출 실패. 응답 구조: " + Object.keys(d).join(', '));
         }
-    } catch(e) { alert("통신 실패: " + e.message); }
+    } catch(e) { 
+        alert("통신 에러 상세: " + e.message); 
+    }
 }
+
+        const d = await res.json();
+        
+        // 데이터 구조 확인 및 강제 할당
+        if(d && d.output && Array.isArray(d.output)) {
+            stocks = d.output; // 전역 변수에 저장
+            console.log("수신 데이터:", stocks); // 디버깅용
+            
+            // 뷰 전환 및 화면 갱신
+            switchMain('screen'); 
+            render(); 
+            
+            alert(`${stocks.length}개의 종목 데이터를 불러왔습니다!`);
+        } else {
+            console.error("응답 에러:", d);
+            alert("데이터 구조에 문제가 있습니다: " + (d.msg1 || "응답 없음"));
+}
+    } catch(e) {
+        console.error("통신 에러:", e);
+        alert("데이터 수신 오류: " + e.message);
+    }
+}
+
+// 5. 화면 렌더링 (상세 진입 포함)
+function render() {
+const container = document.getElementById('listView');
+container.innerHTML = '';
+
+let data = stocks;
+if(currentMarket === 'HISTORY') {
+data = stocks.filter(s => historyData[s.mksc_shrn_iscd]);
+}
+
+if(data.length === 0) {
+container.innerHTML = '<div style="text-align:center; padding:50px; color:#555;">데이터가 없습니다.<br>설정에서 새로고침 하세요.</div>';
+return;
+}
+
+data.forEach(s => {
+const id = s.mksc_shrn_iscd;
+const h = historyData[id] || { score: '', memo: '' };
+const isUp = parseFloat(s.prdy_ctrt) >= 0;
+
+const card = document.createElement('div');
+card.className = 'stock-card';
+card.innerHTML = `
+                   <div class="card-info" onclick="toggleDetail('${id}')">
+                       <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                           <span style="font-weight:bold;">${s.hts_kor_isnm}</span>
+                           <span class="${isUp?'price-up':'price-down'}">${parseInt(s.stck_prpr).toLocaleString()}원</span>
+                       </div>
+                       <div style="display:flex; justify-content:space-between; font-size:12px; color:#888;">
+                           <span>코드: ${id}</span>
+                           <span class="${isUp?'price-up':'price-down'}">${isUp?'+':''}${s.prdy_ctrt}%</span>
+                       </div>
+                   </div>
+                   <div class="detail-area" id="detail-${id}">
+                       <div style="font-size:12px; margin-bottom:10px; color:var(--blue);">나의 종목 분석 기록</div>
+                       <input type="number" id="sc-${id}" placeholder="나의 점수 (0~100)" value="${h.score}">
+                       <textarea id="mm-${id}" rows="3" placeholder="기억할 메모...">${h.memo}</textarea>
+                       <button class="btn-save" onclick="saveRecord('${id}')">💾 저장하기</button>
+                   </div>
+               `;
+container.appendChild(card);
+});
+}
+
+// 6. 상세 보기 토글
+function toggleDetail(id) {
+const el = document.getElementById(`detail-${id}`);
+el.classList.toggle('active');
+}
+
+// 7. 점수 저장
+function saveRecord(id) {
+const sc = document.getElementById(`sc-${id}`).value;
+const mm = document.getElementById(`mm-${id}`).value;
+historyData[id] = { score: sc, memo: mm };
+localStorage.setItem('my_stock_history', JSON.stringify(historyData));
+alert('기록되었습니다!');
+}
+
+// 시계
+setInterval(() => {
+document.getElementById('clock').innerText = new Date().toLocaleTimeString('ko-KR', {hour12:false});
+}, 1000);
+
+// 초기 실행
+document.getElementById('appKey').value = localStorage.getItem('k') || '';
+document.getElementById('appSecret').value = localStorage.getItem('s') || '';
+render();
+</script>
+</body>
+</html>
