@@ -3,52 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>국장 스크리너</title>
+    <title>국장 스크리너 진단모드</title>
     <style>
-        body { background:#0d0f14; color:#fff; font-family:sans-serif; margin:0; }
-        .nav { display:flex; position:sticky; top:0; background:#222; z-index:9999; border-bottom:2px solid #4a9eff; }
-        .nav div { flex:1; padding:20px; text-align:center; cursor:pointer; font-weight:bold; }
-        .nav .active { background:#4a9eff; }
-        .page { display:none; padding:20px; }
-        .page.active { display:block; }
-        .card { background:#1a1e28; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #333; }
-        input { width:100%; padding:15px; margin:10px 0; background:#000; color:#fff; border:1px solid #444; box-sizing:border-box; }
-        button { width:100%; padding:15px; background:#4a9eff; color:#fff; border:none; font-weight:bold; cursor:pointer; }
+        body { background:#0d0f14; color:#fff; font-family:sans-serif; margin:0; padding:20px; }
+        .nav { display:flex; gap:10px; margin-bottom:20px; border-bottom:1px solid #333; padding-bottom:10px; }
+        .nav-btn { flex:1; padding:15px; background:#222; border:1px solid #444; color:#fff; text-align:center; cursor:pointer; }
+        .nav-btn.active { background:#4a9eff; border-color:#4a9eff; }
+        .view { display:none; }
+        .view.active { display:block; }
+        .card { background:#1a1e28; padding:20px; border-radius:10px; border:1px solid #333; margin-bottom:10px; }
+        input { width:100%; padding:15px; margin:10px 0; background:#000; color:#fff; border:1px solid #444; box-sizing:border-box; font-family:monospace; }
+        button { width:100%; padding:15px; background:#4a9eff; color:#fff; border:none; font-weight:bold; cursor:pointer; font-size:16px; }
+        pre { background:#000; padding:10px; overflow-x:auto; font-size:12px; border:1px solid #333; color:#0f0; }
     </style>
 </head>
 <body>
+
     <div class="nav">
-        <div id="m-list" class="active" onclick="show('list')">📊 리스트</div>
-        <div id="m-set" onclick="show('set')">⚙️ 설정</div>
+        <div class="nav-btn active" id="m1" onclick="tab('set')">1. 설정 (키 입력)</div>
+        <div class="nav-btn" id="m2" onclick="tab('list')">2. 종목 리스트</div>
     </div>
 
-    <div id="p-list" class="page active">
-        <div id="listCont" style="text-align:center; padding-top:50px; color:#555;">데이터를 새로고침 하세요.</div>
-    </div>
-
-    <div id="p-set" class="page">
+    <div id="v-set" class="view active">
         <div class="card">
-            <h3>API 설정</h3>
-            <input type="password" id="ak" placeholder="App Key">
-            <input type="password" id="as" placeholder="App Secret">
-            <button onclick="save()">저장 및 토큰 발급</button>
-            <p id="st" style="text-align:center; font-size:12px; margin-top:10px;">상태: 대기</p>
+            <h3 style="margin:0">🔑 한국투자증권 API 키 설정</h3>
+            <p style="font-size:12px; color:#888;">* 반드시 '실전투자'용 키를 복사해서 붙여넣으세요.</p>
+            <input type="text" id="ak" placeholder="App Key (복사-붙여넣기)">
+            <input type="text" id="as" placeholder="App Secret (복사-붙여넣기)">
+            <button onclick="getToken()">토큰 발급 테스트</button>
         </div>
-        <button style="background:#333; margin-top:10px;" onclick="load()">🔄 실시간 데이터 새로고침</button>
+        
+        <div class="card">
+            <h4 style="margin:0">📡 서버 응답 로그 (진단용)</h4>
+            <pre id="log">대기 중...</pre>
+        </div>
+    </div>
+
+    <div id="v-list" class="view">
+        <button onclick="getStocks()" style="background:#333; border:1px solid #4a9eff;">📡 종목 데이터 가져오기</button>
+        <div id="stockCont" style="margin-top:20px;"></div>
     </div>
 
     <script>
-        let stocks = [];
-        function show(p) {
-            document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.nav div').forEach(el => el.classList.remove('active'));
-            document.getElementById('p-'+p).classList.add('active');
-            document.getElementById('m-'+p).classList.add('active');
+        function tab(t) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('v-'+t).classList.add('active');
+            if(t === 'set') document.getElementById('m1').classList.add('active');
+            else document.getElementById('m2').classList.add('active');
         }
 
-        async function save() {
-            const k = document.getElementById('ak').value, s = document.getElementById('as').value;
-            document.getElementById('st').innerText = "연결 시도 중...";
+        const log = (msg) => { document.getElementById('log').innerText = msg; };
+
+        async function getToken() {
+            const k = document.getElementById('ak').value.trim();
+            const s = document.getElementById('as').value.trim();
+            if(!k || !s) return alert("키를 입력하세요.");
+
+            log("토큰 발급 시도 중...");
             try {
                 const r = await fetch('/api/kis-proxy', {
                     method: 'POST',
@@ -56,16 +68,24 @@
                     body: JSON.stringify({ action: 'getToken', appkey: k, appsecret: s })
                 });
                 const d = await r.json();
+                log(JSON.stringify(d, null, 2));
+
                 if(d.access_token) {
                     localStorage.setItem('k', k); localStorage.setItem('s', s); localStorage.setItem('t', d.access_token);
-                    document.getElementById('st').innerText = "✅ 연결 성공!";
-                } else { alert("토큰 실패: " + (d.msg1 || "키를 확인하세요.")); }
-            } catch(e) { alert("서버 에러"); }
+                    alert("✅ 토큰 발급 성공! 다음 단계로 가세요.");
+                    tab('list');
+                } else {
+                    alert("❌ 토큰 발급 실패. 로그를 확인하세요.");
+                }
+            } catch(e) { log("에러: " + e.message); }
         }
 
-        async function load() {
+        async function getStocks() {
             const t = localStorage.getItem('t'), k = localStorage.getItem('k'), s = localStorage.getItem('s');
             if(!t) return alert("설정에서 토큰부터 받으세요.");
+
+            const cont = document.getElementById('stockCont');
+            cont.innerHTML = "데이터 로딩 중...";
             try {
                 const r = await fetch('/api/kis-proxy', {
                     method: 'POST',
@@ -74,31 +94,22 @@
                 });
                 const d = await r.json();
                 const list = d.output || d.output1;
-                
+
                 if(list && Array.isArray(list) && list.length > 0) {
-                    stocks = list; render(); show('list');
+                    cont.innerHTML = list.map(i => `
+                        <div class="card">
+                            <b>${i.hts_kor_isnm}</b> (${i.mksc_shrn_iscd})<br>
+                            <span style="color:#4a9eff">${parseInt(i.stck_prpr).toLocaleString()}원</span> | ${i.prdy_ctrt}%
+                        </div>
+                    `).join('');
                 } else {
-                    // 한투에서 보내는 상세 에러 메시지 출력
-                    const msg = d.msg1 || "데이터가 비어있습니다.";
-                    const code = d.rt_cd || "알 수 없음";
-                    alert(`⚠️ 한투 응답 실패\n코드: ${code}\n메시지: ${msg}\n\n*팁: 실전계좌용 키가 맞는지 확인하세요!`);
+                    cont.innerHTML = `<div class="card" style="color:#ff5c5c">데이터가 없습니다.<br>사유: ${d.msg1 || '확인불가'}</div>`;
+                    console.log("전체 응답:", d);
                 }
-            } catch(e) { alert("통신 에러"); }
+            } catch(e) { cont.innerHTML = "통신 에러: " + e.message; }
         }
 
-        function render() {
-            const c = document.getElementById('listCont');
-            c.innerHTML = stocks.map(s => `
-                <div class="card">
-                    <div style="display:flex; justify-content:space-between;">
-                        <b>${s.hts_kor_isnm}</b>
-                        <span>${parseInt(s.stck_prpr).toLocaleString()}원</span>
-                    </div>
-                    <div style="font-size:12px; color:#888; margin-top:5px;">${s.mksc_shrn_iscd} | ${s.prdy_ctrt}%</div>
-                </div>
-            `).join('');
-        }
-
+        // 저장된 키 불러오기
         document.getElementById('ak').value = localStorage.getItem('k') || '';
         document.getElementById('as').value = localStorage.getItem('s') || '';
     </script>
