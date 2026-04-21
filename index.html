@@ -1076,7 +1076,7 @@ function toggleExpand(id) {
   }
 }
 
-// 종목 클릭 시 재무지표 실시간 로드
+// 종목 클릭 시 재무지표 실시간 로드 — DOM 직접 업데이트 (renderList 재호출 없음)
 async function loadStockDetail(stockId) {
   var all = KOSPI_STOCKS.concat(KOSDAQ_STOCKS);
   var s = null;
@@ -1086,50 +1086,96 @@ async function loadStockDetail(stockId) {
   var detail = await fetchStockDetail(stockId, s._market || 'KOSPI');
   if (!detail) return;
 
-  // 재무지표 업데이트
-  s.price  = parseInt(detail.stck_prpr || s.price);
-  s.chg    = parseFloat(detail.prdy_ctrt || s.chg);
-  s.pbr    = parseFloat(detail.pbr || s.pbr || 0);
-  s.per    = parseFloat(detail.per || s.per || 0);
-  s.roe    = parseFloat(detail.roe || s.roe || 0);
-  s.div    = parseFloat(detail.stck_divi || s.div || 0);
-  s.sector = detail.bstp_kor_isnm || s.sector;
-  // 외인 순매수량 (단위: 주 → 억 근사값)
-  var frgn = parseInt(detail.frgn_ntby_qty || 0);
-  s.foreign = frgn >= 0 ? '+' + Math.round(frgn * s.price / 100000000) + '억' : Math.round(frgn * s.price / 100000000) + '억';
-  // 52주 고가 대비
-  var high52 = parseInt(detail.d250_hgpr || 0);
-  if (high52 > 0 && s.price > 0) s.w52 = Math.round((s.price - high52) / high52 * 100);
+  // KIS inquire-price 응답 필드명 (실제 API 스펙 기준)
+  // stck_prpr=현재가, prdy_ctrt=등락률, pbr=PBR, per=PER, eps=EPS
+  // bstp_kor_isnm=업종명, frgn_ntby_qty=외인순매수량, d250_hgpr=52주고가
+  // stck_divi=주당배당금 (배당수익률은 별도 계산 필요)
 
-  // 화면 다시 그리기 (카드 열린 상태 유지)
-  renderList();
+  if (detail.stck_prpr) s.price = parseInt(detail.stck_prpr);
+  if (detail.prdy_ctrt) s.chg   = parseFloat(detail.prdy_ctrt);
+  if (detail.pbr)       s.pbr   = parseFloat(detail.pbr);
+  if (detail.per)       s.per   = parseFloat(detail.per);
+  if (detail.eps && s.price > 0) s.roe = parseFloat((parseInt(detail.eps) / s.price * 100).toFixed(1));
+  if (detail.bstp_kor_isnm) s.sector = detail.bstp_kor_isnm;
+
+  // 외인 순매수 (주 단위 → 금액 억원)
+  var frgnQty = parseInt(detail.frgn_ntby_qty || 0);
+  if (frgnQty !== 0 && s.price > 0) {
+    var frgnAmt = Math.round(frgnQty * s.price / 100000000);
+    s.foreign = frgnAmt >= 0 ? '+' + frgnAmt + '억' : frgnAmt + '억';
+  }
+
+  // 52주 고가 대비 현재가 등락률
+  var high52 = parseInt(detail.d250_hgpr || 0);
+  if (high52 > 0 && s.price > 0) {
+    s.w52 = Math.round((s.price - high52) / high52 * 100);
+  }
+
+  // 거래량 업데이트
+  var volNum = parseInt(detail.acml_vol || 0);
+  if (volNum > 0) {
+    s.vol = volNum >= 10000 ? Math.round(volNum/10000) + '만주' : volNum.toLocaleString() + '주';
+  }
+
+  // renderList 대신 해당 카드 DOM만 직접 업데이트 (카드 닫힘 방지)
+  // 메트릭 박스 직접 갱신
+  function setMetric(label, val, flag) {
+    var card = document.getElementById('card-' + stockId);
+    if (!card) return;
+    var boxes = card.querySelectorAll('.metric-box');
+    for (var i = 0; i < boxes.length; i++) {
+      var lbl = boxes[i].querySelector('.m-label');
+      if (lbl && lbl.textContent === label) {
+        var v = boxes[i].querySelector('.m-val');
+        var f = boxes[i].querySelector('.m-flag');
+        if (v) v.textContent = val;
+        if (f && flag) f.textContent = flag;
+        break;
+      }
+    }
+  }
+
+  setMetric('PBR',  s.pbr  ? s.pbr.toFixed(2)  : '—', s.pbr < 1 ? '저평가' : s.pbr > 3 ? '고평가' : '보통');
+  setMetric('PER',  s.per  ? s.per.toFixed(1)   : 'N/A', s.per && s.per < 10 ? '저평가' : s.per && s.per > 30 ? '고평가' : '보통');
+  setMetric('ROE',  s.roe  ? s.roe.toFixed(1) + '%' : '—', '');
+  setMetric('외인순매수', s.foreign || '—', s.foreign && s.foreign.startsWith('+') ? '유입' : '유출');
+  setMetric('52주대비', s.w52 ? (s.w52 > 0 ? '+' : '') + s.w52 + '%' : '—', s.w52 <= -30 ? '낙폭과대' : s.w52 >= 30 ? '고점권' : '보통');
+
+  // 가격/등락률 직접 업데이트
+  var card2 = document.getElementById('card-' + stockId);
+  if (card2) {
+    var priceEl = card2.querySelector('.price-main');
+    var chgEl   = card2.querySelector('.price-chg');
+    if (priceEl) priceEl.textContent = s.price.toLocaleString();
+    if (chgEl)   chgEl.textContent   = (s.chg >= 0 ? '+' : '') + s.chg + '%';
+  }
 }
 
 function switchDetailTab(e, id, idx) {
   e.stopPropagation();
   expandedDetailTab[id] = idx;
   renderList();
-  if(idx===0) setTimeout(()=>loadAiAnalysis(id), 100);
+  if(idx===0) setTimeout(function(){ loadAiAnalysis(id); }, 100);
 }
 
 function toggleWatch(e, id) {
   e.stopPropagation();
-  if(watchlist.includes(id)) watchlist = watchlist.filter(i=>i!==id);
+  if(watchlist.includes(id)) watchlist = watchlist.filter(function(i){ return i !== id; });
   else watchlist.push(id);
   localStorage.setItem('watchlist', JSON.stringify(watchlist));
   renderList();
 }
 
 function saveMemo(id) {
-  const val = document.getElementById(`memo-${id}`)?.value || '';
+  var val = (document.getElementById('memo-' + id) || {}).value || '';
   memos[id] = val;
   localStorage.setItem('memos', JSON.stringify(memos));
-  const btn = document.querySelector(`#card-${id} .save-btn`);
-  if(btn) { btn.textContent = '저장됨 ✓'; setTimeout(()=>{ btn.textContent='저장'; },1500); }
+  var btn = document.querySelector('#card-' + id + ' .save-btn');
+  if(btn) { btn.textContent = '저장됨 ✓'; setTimeout(function(){ btn.textContent='저장'; }, 1500); }
 }
 
-function openNoti() { document.getElementById('notiModal').classList.add('open'); }
-function closeNoti(e) { if(e.target===document.getElementById('notiModal')) document.getElementById('notiModal').classList.remove('open'); }
+function openNoti() { switchMainTab(4); }
+function closeNoti(e) {}
 function toggleNoti(el) { el.classList.toggle('on'); }
 
 // ── Claude AI Analysis ────────────────────────────────────────────
