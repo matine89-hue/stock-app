@@ -238,93 +238,31 @@ status.innerText = "✅ 연결 성공! 데이터를 새로고침 하세요.";
 
 // 4. 데이터 수신
 async function fetchData() {
-            const token = localStorage.getItem('t');
-            if(!token) return alert("설정에서 먼저 연결하세요.");
-
-            const token = localStorage.getItem('t'), key = localStorage.getItem('k'), sec = localStorage.getItem('s');
-            if(!token) return alert("설정에서 연결부터 하세요.");
-try {
-const res = await fetch('/api/kis-proxy', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'volumeRank', 
-                        market: currentMarket === 'HISTORY' ? 'KOSPI' : currentMarket,
-                        token: token, appkey: localStorage.getItem('k'), appsecret: localStorage.getItem('s')
-                    })
-                    body: JSON.stringify({ action: 'volumeRank', market: subTab === 'HISTORY' ? 'KOSPI' : subTab, token, appkey: key, appsecret: sec })
-});
-const d = await res.json();
-                if(d.output) {
-                    stocks = d.output;
-                const final = d.output || d.output1 || d;
-                if(Array.isArray(final)) {
-                    stocks = final;
-render();
-                    alert("최신 데이터를 가져왔습니다.");
-                    switchMain('screen');
-                }
-            } catch(e) { alert("데이터 수신 오류"); }
-     // index.html 내의 fetchData 함수를 이 내용으로 교체하거나 전체를 덮어씌워주세요.
-
-async function fetchData() {
     const token = localStorage.getItem('t'), key = localStorage.getItem('k'), sec = localStorage.getItem('s');
     if(!token) return alert("연결부터 하세요.");
-                    showMainView('screen');
-                    alert("데이터 수신 완료!");
-                } else { alert("응답은 성공했으나 데이터가 비어있습니다."); }
-            } catch(e) { alert("통신 에러"); }
-        }
 
     try {
         const res = await fetch('/api/kis-proxy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'volumeRank', market: currentMarket, token, appkey: key, appsecret: sec })
+            body: JSON.stringify({ action: 'volumeRank', market: subTab, token, appkey: key, appsecret: sec })
         });
+        const d = await res.json();
         
-        const rawText = await res.text(); // JSON으로 바꾸기 전 텍스트 그대로 읽기
-        alert("서버 응답 원문: " + rawText.substring(0, 300)); // 원문 300자만 팝업으로 확인
+        // 종목 리스트가 들어있는 곳 확인
+        const list = d.output || d.output1;
         
-        const d = JSON.parse(rawText);
-        const finalData = d.output || d.output1 || (Array.isArray(d) ? d : null);
-        
-        if(finalData && Array.isArray(finalData)) {
-            stocks = finalData;
+        if(list && Array.isArray(list) && list.length > 0) {
+            stocks = list;
             render();
-            switchMain('screen');
+            showMainView('screen');
         } else {
-            alert("데이터 추출 실패. 응답 구조: " + Object.keys(d).join(', '));
-        function render() {
-            const cont = document.getElementById('stockList');
-            cont.innerHTML = '';
-            let data = subTab === 'HISTORY' ? stocks.filter(s => history[s.mksc_shrn_iscd]) : stocks;
-
-            if(data.length === 0) {
-                cont.innerHTML = `<div style="text-align:center; padding:50px; color:#555;">${subTab === 'HISTORY' ? '기록된 종목이 없습니다.' : '데이터를 새로고침 하세요.'}</div>`;
-                return;
-            }
-
-            data.forEach(s => {
-                const id = s.mksc_shrn_iscd, h = history[id] || { score: '', memo: '' };
-                const card = document.createElement('div');
-                card.className = 'stock-card';
-                card.innerHTML = `
-                    <div class="card-info" onclick="toggleDetail('${id}')">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span style="font-weight:bold;">${s.hts_kor_isnm}</span>
-                            <span style="color:${s.prdy_ctrt > 0 ? '#ff5c5c' : '#4a9eff'}">${parseInt(s.stck_prpr).toLocaleString()}원</span>
-                        </div>
-                        <div style="font-size:12px; color:#888;">${id} | ${s.prdy_ctrt}%</div>
-                    </div>
-                    <div class="detail-area" id="det-${id}">
-                        <input type="number" id="sc-${id}" placeholder="나의 점수" value="${h.score}">
-                        <textarea id="mm-${id}" placeholder="메모...">${h.memo}</textarea>
-                        <button onclick="saveRec('${id}')">기록 저장</button>
-                    </div>
-                `;
-                cont.appendChild(card);
-            });
+            // 여기가 핵심입니다. 한투가 보낸 메시지를 그대로 보여줍니다.
+            const errorReason = d.msg1 || "알 수 없는 이유로 데이터가 오지 않았습니다.";
+            const errorCode = d.rt_cd || "코드없음";
+            alert(`⚠️ 한투 서버 응답\n[결과코드: ${errorCode}]\n내용: ${errorReason}\n\n*팁: 모의투자 계좌라면 실전계좌 키로 바꿔보세요!`);
+        }
+    } catch(e) { alert("통신 실패: " + e.message); }
 }
     } catch(e) { 
         alert("통신 에러 상세: " + e.message); 
