@@ -14,7 +14,7 @@
   --radius: 10px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; overflow-x: hidden; }
 .app { max-width: 500px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
 
 /* Header */
@@ -25,17 +25,17 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 
 /* Tabs */
 .tabs-container { padding: 0 16px 12px; }
-.tabs { display: flex; background: var(--bg3); padding: 4px; border-radius: var(--radius); gap: 4px; }
-.tab { flex: 1; text-align: center; padding: 10px 0; font-size: 12px; border-radius: 7px; cursor: pointer; color: var(--text2); transition: 0.2s; }
-.tab.active { background: var(--bg4); color: var(--text); font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.tabs { display: flex; background: var(--bg3); padding: 4px; border-radius: var(--radius); gap: 4px; border: 1px solid var(--border); }
+.tab { flex: 1; text-align: center; padding: 10px 0; font-size: 12px; border-radius: 7px; cursor: pointer; color: var(--text2); }
+.tab.active { background: var(--bg4); color: var(--text); font-weight: 700; }
 
-/* Main Content */
-.content { flex: 1; padding: 0 16px 80px; }
+/* Content */
+.content { flex: 1; padding: 0 16px 100px; }
 .view-section { display: none; }
 .view-section.active { display: block; }
 
-/* Stock Cards */
-.stock-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; overflow: hidden; }
+/* Stock Card */
+.stock-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; }
 .card-main { padding: 16px; cursor: pointer; }
 .card-top { display: flex; justify-content: space-between; margin-bottom: 6px; }
 .card-bottom { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); }
@@ -43,5 +43,48 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 /* Detail Panel */
 .detail-panel { display: none; background: var(--bg3); padding: 16px; border-top: 1px solid var(--border2); }
 .detail-panel.open { display: block; }
-.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
-.grid-item { background: var(--bg4); padding: 10px; border-radius
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.grid-item { background: var(--bg4); padding: 8px; border-radius: 6px; text-align: center; }
+.label { font-size: 9px; color: var(--text3); display: block; }
+.val { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 12px; }
+
+/* Form & Buttons */
+input, textarea { width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); padding: 10px; margin-bottom: 8px; outline: none; }
+button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+.btn-blue { background: var(--blue); color: #fff; }
+.btn-outline { background: transparent; border: 1px solid var(--blue); color: var(--blue); margin-top: 10px; }
+
+/* Bottom Nav */
+.bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 500px; background: var(--bg2); display: flex; border-top: 1px solid var(--border); padding: 10px 0; z-index: 1000; }
+.nav-item { flex: 1; text-align: center; color: var(--text3); font-size: 10px; cursor: pointer; }
+.nav-item.active { color: var(--blue); }
+.nav-icon { font-size: 20px; margin-bottom: 2px; }
+
+.up { color: var(--red); } .dn { color: var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="header">
+    <div class="logo">국장<span>스크리너</span></div>
+    <div id="clock" class="clock">00:00:00</div>
+  </div>
+
+  <div class="tabs-container" id="topTabs">
+    <div class="tabs">
+      <div class="tab active" onclick="setSubView('KOSPI')">코스피</div>
+      <div class="tab" onclick="setSubView('KOSDAQ')">코스닥</div>
+      <div class="tab" onclick="setSubView('WATCH')">관심</div>
+      <div class="tab" onclick="setSubView('HISTORY')">기록</div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div id="section-list" class="view-section active">
+      <div id="stockListContainer"></div>
+    </div>
+
+    <div id="section-settings" class="view-section">
+      <div style="background:var(--bg2); padding:20px; border-radius:var(--radius); border:1px solid var(--border);">
+        <h3 style="margin-bottom:15px; font-size:16
