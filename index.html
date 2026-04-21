@@ -1,11 +1,11 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
- <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>국장 스크리너</title>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
-  <style>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>국장 스크리너</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
 :root {
   --bg: #0d0f14;
   --bg2: #13161e;
@@ -208,161 +208,150 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 .sb-3 { background: var(--amber-dim); color: var(--amber); border: 0.5px solid rgba(255,184,74,0.3); }
 .sb-low { background: var(--bg4); color: var(--text3); border: 0.5px solid var(--border); }
 </style>
- </head>
- <body>
-  <div class="app" id="app">
-   <!-- Header -->
-   <div class="header">
-    <div class="logo">
-     국장<span>스크리너</span>
-    </div>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">국장<span>스크리너</span></div>
     <div class="header-right">
-     <div class="time-badge" id="clock">--:--</div>
-     <div class="noti-btn" onclick="switchMainTab(4)">🔔</div>
+      <div class="time-badge" id="clock">--:--</div>
+      <div class="noti-btn" onclick="switchMainTab(4)">🔔</div>
     </div>
-   </div>
-   <!-- Market bar -->
-   <div class="market-bar">
+  </div>
+
+  <!-- Market bar -->
+  <div class="market-bar">
     <div class="market-status">
-     <div class="dot-live"></div>
-     <span style="font-size:11px;color:var(--text2)">장 마감 후 분석</span>
+      <div class="dot-live"></div>
+      <span style="font-size:11px;color:var(--text2)">장 마감 후 분석</span>
     </div>
     <div class="market-indices">
-     <div class="idx">
-      <span class="idx-name">KOSPI</span><span class="idx-val">2,538</span> <span class="idx-chg dn">-0.42%</span>
-     </div>
-     <div class="idx">
-      <span class="idx-name">KOSDAQ</span><span class="idx-val">723</span> <span class="idx-chg up">+0.81%</span>
-     </div>
+      <div class="idx"><span class="idx-name">KOSPI</span><span class="idx-val">2,538</span> <span class="idx-chg dn">-0.42%</span></div>
+      <div class="idx"><span class="idx-name">KOSDAQ</span><span class="idx-val">723</span> <span class="idx-chg up">+0.81%</span></div>
     </div>
-   </div>
-   <!-- Tabs -->
-   <div class="tabs-wrap">
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs-wrap">
     <div class="tabs">
-     <div class="tab active" id="tab0" onclick="switchMainTab(0)">📊 코스피</div>
-     <div class="tab" id="tab1" onclick="switchMainTab(1)">📈 코스닥</div>
-     <div class="tab" id="tab2" onclick="switchMainTab(2)">⭐ 관심</div>
-     <div class="tab" id="tab3" onclick="switchMainTab(3)">📋 기록</div>
+      <div class="tab active" id="tab0" onclick="switchMainTab(0)">📊 코스피</div>
+      <div class="tab" id="tab1" onclick="switchMainTab(1)">📈 코스닥</div>
+      <div class="tab" id="tab2" onclick="switchMainTab(2)">⭐ 관심</div>
+      <div class="tab" id="tab3" onclick="switchMainTab(3)">📋 기록</div>
     </div>
-   </div>
-   <!-- Filter chips -->
-   <div class="filter-row" id="filterRow">
+  </div>
+
+  <!-- Filter chips -->
+  <div class="filter-row" id="filterRow">
     <div class="filter-chip active" onclick="setFilter('all',this)">전체</div>
     <div class="filter-chip" onclick="setFilter('high',this)">추천 4점↑</div>
     <div class="filter-chip" onclick="setFilter('drop',this)">낙폭과대</div>
     <div class="filter-chip" onclick="setFilter('pbr',this)">PBR 저평가</div>
     <div class="filter-chip" onclick="setFilter('foreign',this)">외인매수</div>
     <div class="filter-chip" onclick="setFilter('dividend',this)">고배당</div>
-   </div>
-   <!-- Stock list -->
-   <div class="stock-list" id="stockList"></div>
-   <div id="settingsPanel" style="display:none;padding:16px;flex:1;overflow-y:auto;">
-    <!-- API 연결 상태 -->
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
-     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">KIS API 연결 상태</div>
-     <div id="apiStatusBadge" style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius-sm);border:0.5px solid var(--border);">
+  </div>
+
+  <!-- Stock list -->
+  <div class="stock-list" id="stockList"></div>
+
+  <div id="settingsPanel" style="display:none;padding:16px;flex:1;overflow-y:auto;">
+  <!-- API 연결 상태 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">KIS API 연결 상태</div>
+    <div id="apiStatusBadge" style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg3);border-radius:var(--radius-sm);border:0.5px solid var(--border);">
       <div id="apiStatusDot" style="width:8px;height:8px;border-radius:50%;background:var(--text3)"></div>
       <span id="apiStatusText" style="font-size:13px;color:var(--text2)">API 키 미설정</span>
-     </div>
-     <div id="apiTokenInfo" style="margin-top:8px;font-size:11px;color:var(--text3);display:none"></div>
     </div>
-    <!-- App Key 입력 -->
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
-     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">KIS App Key / Secret 입력</div>
-     <div style="margin-bottom:8px;">
+    <div id="apiTokenInfo" style="margin-top:8px;font-size:11px;color:var(--text3);display:none"></div>
+  </div>
+
+  <!-- App Key 입력 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">KIS App Key / Secret 입력</div>
+    <div style="margin-bottom:8px;">
       <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">App Key</div>
-      <input id="inputAppKey" type="password" placeholder="PS0knAM6JLAjIa93Mi..." style="width:100%;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:9px 12px;outline:none;" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border2)'">
-     </div>
-     <div style="margin-bottom:12px;">
+      <input id="inputAppKey" type="password" placeholder="PS0knAM6JLAjIa93Mi..." style="width:100%;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:9px 12px;outline:none;" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border2)'"/>
+    </div>
+    <div style="margin-bottom:12px;">
       <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">App Secret</div>
-      <input id="inputAppSecret" type="password" placeholder="V9J3YGPE5q2ZRG5Egqn..." style="width:100%;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:9px 12px;outline:none;" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border2)'">
-     </div>
-     <div style="display:flex;gap:8px;">
+      <input id="inputAppSecret" type="password" placeholder="V9J3YGPE5q2ZRG5Egqn..." style="width:100%;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:9px 12px;outline:none;" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border2)'"/>
+    </div>
+    <div style="display:flex;gap:8px;">
       <button onclick="saveAndConnect()" style="flex:1;padding:10px;background:var(--blue-dim);border:0.5px solid var(--blue);border-radius:var(--radius-sm);color:var(--blue);font-size:13px;font-weight:500;cursor:pointer;">저장 및 토큰 발급</button>
       <button onclick="clearKeys()" style="padding:10px 14px;background:transparent;border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text3);font-size:13px;cursor:pointer;">초기화</button>
-     </div>
-     <div style="margin-top:8px;font-size:11px;color:var(--text3);">⚠️ 키는 이 기기 브라우저에만 저장됩니다. 타인과 공유하지 마세요.</div>
     </div>
-    <!-- 실시간 데이터 불러오기 -->
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
-     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">실시간 데이터 새로고침</div>
-     <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">KIS API 연결 후 버튼을 누르면 거래량 상위 종목·시세·재무데이터를 실제 데이터로 교체합니다.</div>
-     <button onclick="fetchLiveData()" style="width:100%;padding:10px;background:var(--green-dim);border:0.5px solid var(--green);border-radius:var(--radius-sm);color:var(--green);font-size:13px;font-weight:500;cursor:pointer;" id="fetchBtn">📡 실시간 데이터 불러오기</button>
-     <div id="fetchStatus" style="margin-top:8px;font-size:11px;color:var(--text3);"></div>
+    <div style="margin-top:8px;font-size:11px;color:var(--text3);">⚠️ 키는 이 기기 브라우저에만 저장됩니다. 타인과 공유하지 마세요.</div>
+  </div>
+
+  <!-- 실시간 데이터 불러오기 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">실시간 데이터 새로고침</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6">KIS API 연결 후 버튼을 누르면 거래량 상위 종목·시세·재무데이터를 실제 데이터로 교체합니다.</div>
+    <button onclick="fetchLiveData()" style="width:100%;padding:10px;background:var(--green-dim);border:0.5px solid var(--green);border-radius:var(--radius-sm);color:var(--green);font-size:13px;font-weight:500;cursor:pointer;" id="fetchBtn">📡 실시간 데이터 불러오기</button>
+    <div id="fetchStatus" style="margin-top:8px;font-size:11px;color:var(--text3);"></div>
+  </div>
+
+  <!-- 알림 설정 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">알림 설정</div>
+    <div class="noti-row">
+      <div><div class="noti-info">장 마감 후 분석 완료</div><div class="noti-sub">매일 오후 4:00 · 거래량 TOP10</div></div>
+      <div class="toggle on" onclick="toggleNoti(this)"><div class="toggle-knob"></div></div>
     </div>
-    <!-- 알림 설정 -->
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
-     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">알림 설정</div>
-     <div class="noti-row">
-      <div>
-       <div class="noti-info">장 마감 후 분석 완료</div>
-       <div class="noti-sub">매일 오후 4:00 · 거래량 TOP10</div>
-      </div>
-      <div class="toggle on" onclick="toggleNoti(this)">
-       <div class="toggle-knob"></div>
-      </div>
-     </div>
-     <div class="noti-row">
-      <div>
-       <div class="noti-info">장 개장 전 브리핑</div>
-       <div class="noti-sub">매일 오전 8:30 · 주목 종목</div>
-      </div>
-      <div class="toggle on" onclick="toggleNoti(this)">
-       <div class="toggle-knob"></div>
-      </div>
-     </div>
-     <div class="noti-row">
-      <div>
-       <div class="noti-info">관심종목 점수 변동</div>
-       <div class="noti-sub">점수 1점 이상 변동 시</div>
-      </div>
-      <div class="toggle" onclick="toggleNoti(this)">
-       <div class="toggle-knob"></div>
-      </div>
-     </div>
-     <div class="noti-row" style="border-bottom:none;">
-      <div>
-       <div class="noti-info">5점 종목 긴급 알림</div>
-       <div class="noti-sub">추천 5점 종목 등장 시 즉시</div>
-      </div>
-      <div class="toggle on" onclick="toggleNoti(this)">
-       <div class="toggle-knob"></div>
-      </div>
-     </div>
+    <div class="noti-row">
+      <div><div class="noti-info">장 개장 전 브리핑</div><div class="noti-sub">매일 오전 8:30 · 주목 종목</div></div>
+      <div class="toggle on" onclick="toggleNoti(this)"><div class="toggle-knob"></div></div>
     </div>
-    <!-- 앱 정보 -->
-    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:24px;">
-     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">앱 정보</div>
-     <div style="font-size:12px;color:var(--text2);line-height:1.8;">
+    <div class="noti-row">
+      <div><div class="noti-info">관심종목 점수 변동</div><div class="noti-sub">점수 1점 이상 변동 시</div></div>
+      <div class="toggle" onclick="toggleNoti(this)"><div class="toggle-knob"></div></div>
+    </div>
+    <div class="noti-row" style="border-bottom:none;">
+      <div><div class="noti-info">5점 종목 긴급 알림</div><div class="noti-sub">추천 5점 종목 등장 시 즉시</div></div>
+      <div class="toggle on" onclick="toggleNoti(this)"><div class="toggle-knob"></div></div>
+    </div>
+  </div>
+
+  <!-- 앱 정보 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:24px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">앱 정보</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.8;">
       <div>버전: 1.0.0 (샘플→실전 전환)</div>
       <div>데이터: KIS Open API (한국투자증권)</div>
       <div>AI 분석: Claude Sonnet</div>
       <div style="margin-top:8px;font-size:11px;color:var(--text3);">※ 본 앱은 투자 참고용이며, 투자 손익에 대한 책임은 본인에게 있습니다.</div>
-     </div>
     </div>
-   </div>
-   <!-- Bottom nav -->
-   <div class="bottom-nav">
+  </div>
+</div>
+
+  <!-- Bottom nav -->
+  <div class="bottom-nav">
     <div class="nav-item active" id="nav0" onclick="switchMainTab(0)">
-     <div class="nav-icon">📊</div>
-     <div class="nav-label">스크리너</div>
+      <div class="nav-icon">📊</div>
+      <div class="nav-label">스크리너</div>
     </div>
     <div class="nav-item" id="nav2" onclick="switchMainTab(2)">
-     <div class="nav-icon">⭐</div>
-     <div class="nav-label">관심</div>
+      <div class="nav-icon">⭐</div>
+      <div class="nav-label">관심</div>
     </div>
     <div class="nav-item" id="nav3" onclick="switchMainTab(3)">
-     <div class="nav-icon">📋</div>
-     <div class="nav-label">점수기록</div>
+      <div class="nav-icon">📋</div>
+      <div class="nav-label">점수기록</div>
     </div>
     <div class="nav-item" id="nav4" onclick="switchMainTab(4)">
-     <div class="nav-icon">⚙️</div>
-     <div class="nav-label">설정</div>
+      <div class="nav-icon">⚙️</div>
+      <div class="nav-label">설정</div>
     </div>
-   </div>
   </div>
-  <!-- Notification settings moved to Settings tab -->
-  <script>
+
+</div>
+
+
+<!-- Notification settings moved to Settings tab -->
+
+<script>
 // ── KIS API Config ────────────────────────────────────────────────
 // 제미나이 검증 방식 — 토큰 직접 저장/사용, 단순 구조
 let KIS_APP_KEY    = localStorage.getItem('k') || '';
@@ -1082,5 +1071,5 @@ PBR: ${s.pbr} / PER: ${s.per||'N/A'} / ROE: ${s.roe}% / 부채비율: ${s.debt}%
 renderList();
 initApiStatus();
 </script>
- </body>
+</body>
 </html>
