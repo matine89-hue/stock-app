@@ -1,90 +1,215 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>국장 스크리너</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<style>
-:root {
-  --bg: #0d0f14; --bg2: #13161e; --bg3: #1a1e28; --bg4: #222636;
-  --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
-  --text: #e8eaf0; --text2: #8b90a0; --text3: #555a6e;
-  --blue: #4a9eff; --green: #3dd68c; --red: #ff5c5c; --amber: #ffb84a;
-  --radius: 10px;
-}
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; overflow-x: hidden; }
-.app { max-width: 500px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>국장 스크리너</title>
+    <style>
+        :root { --bg: #0d0f14; --bg2: #1a1e28; --blue: #4a9eff; --text: #e8eaf0; --border: #2d3343; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 0; }
+        .app { max-width: 500px; margin: 0 auto; padding-bottom: 80px; position: relative; min-height: 100vh; }
+        
+        /* Header & Tabs */
+        .header { padding: 20px; display: flex; justify-content: space-between; font-weight: bold; border-bottom: 1px solid var(--border); }
+        .tabs { display: flex; background: var(--bg2); margin: 15px; border-radius: 8px; padding: 4px; gap: 4px; }
+        .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; border-radius: 6px; font-size: 13px; color: #888; }
+        .tab.active { background: #30364d; color: var(--blue); font-weight: bold; }
+        
+        /* Stock List */
+        .list-container { padding: 0 15px; }
+        .stock-card { background: var(--bg2); margin-bottom: 12px; border-radius: 10px; border: 1px solid var(--border); overflow: hidden; }
+        .card-info { padding: 16px; cursor: pointer; }
+        
+        /* Detail Area (핵심!) */
+        .detail-area { display: none; padding: 16px; background: #222736; border-top: 1px solid var(--border); }
+        .detail-area.active { display: block; }
+        
+        input, textarea { width: 100%; background: #0d0f14; border: 1px solid var(--border); color: #fff; padding: 12px; margin-bottom: 10px; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        .btn-save { background: var(--blue); color: white; border: none; padding: 12px; border-radius: 6px; width: 100%; font-weight: bold; cursor: pointer; }
 
-/* Header */
-.header { padding: 16px; display: flex; justify-content: space-between; align-items: center; }
-.logo { font-size: 18px; font-weight: 700; }
-.logo span { color: var(--blue); }
-.clock { font-family: 'JetBrains Mono'; font-size: 12px; color: var(--text2); }
+        /* Navigation */
+        .nav { position: fixed; bottom: 0; width: 100%; max-width: 500px; display: flex; background: var(--bg2); border-top: 1px solid var(--border); z-index: 100; }
+        .nav-item { flex: 1; text-align: center; padding: 15px; font-size: 12px; color: #888; cursor: pointer; }
+        .nav-item.active { color: var(--blue); }
 
-/* Tabs */
-.tabs-container { padding: 0 16px 12px; }
-.tabs { display: flex; background: var(--bg3); padding: 4px; border-radius: var(--radius); gap: 4px; border: 1px solid var(--border); }
-.tab { flex: 1; text-align: center; padding: 10px 0; font-size: 12px; border-radius: 7px; cursor: pointer; color: var(--text2); }
-.tab.active { background: var(--bg4); color: var(--text); font-weight: 700; }
-
-/* Content */
-.content { flex: 1; padding: 0 16px 100px; }
-.view-section { display: none; }
-.view-section.active { display: block; }
-
-/* Stock Card */
-.stock-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; }
-.card-main { padding: 16px; cursor: pointer; }
-.card-top { display: flex; justify-content: space-between; margin-bottom: 6px; }
-.card-bottom { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); }
-
-/* Detail Panel */
-.detail-panel { display: none; background: var(--bg3); padding: 16px; border-top: 1px solid var(--border2); }
-.detail-panel.open { display: block; }
-.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-.grid-item { background: var(--bg4); padding: 8px; border-radius: 6px; text-align: center; }
-.label { font-size: 9px; color: var(--text3); display: block; }
-.val { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 12px; }
-
-/* Form & Buttons */
-input, textarea { width: 100%; background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); padding: 10px; margin-bottom: 8px; outline: none; }
-button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; transition: 0.2s; }
-.btn-blue { background: var(--blue); color: #fff; }
-.btn-outline { background: transparent; border: 1px solid var(--blue); color: var(--blue); margin-top: 10px; }
-
-/* Bottom Nav */
-.bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 500px; background: var(--bg2); display: flex; border-top: 1px solid var(--border); padding: 10px 0; z-index: 1000; }
-.nav-item { flex: 1; text-align: center; color: var(--text3); font-size: 10px; cursor: pointer; }
-.nav-item.active { color: var(--blue); }
-.nav-icon { font-size: 20px; margin-bottom: 2px; }
-
-.up { color: var(--red); } .dn { color: var(--blue); }
-</style>
+        .price-up { color: #ff5c5c; }
+        .price-down { color: #4a9eff; }
+    </style>
 </head>
 <body>
+    <div class="app">
+        <div class="header">
+            <span>국장 스크리너</span>
+            <span id="clock" style="font-family: monospace;">00:00:00</span>
+        </div>
 
-<div class="app">
-  <div class="header">
-    <div class="logo">국장<span>스크리너</span></div>
-    <div id="clock" class="clock">00:00:00</div>
-  </div>
+        <div class="tabs" id="mainTabs">
+            <div class="tab active" onclick="changeMarket('KOSPI')">코스피</div>
+            <div class="tab" onclick="changeMarket('KOSDAQ')">코스닥</div>
+            <div class="tab" onclick="changeMarket('HISTORY')">점수기록</div>
+        </div>
 
-  <div class="tabs-container" id="topTabs">
-    <div class="tabs">
-      <div class="tab active" onclick="setSubView('KOSPI')">코스피</div>
-      <div class="tab" onclick="setSubView('KOSDAQ')">코스닥</div>
-      <div class="tab" onclick="setSubView('WATCH')">관심</div>
-      <div class="tab" onclick="setSubView('HISTORY')">기록</div>
+        <div id="listView" class="list-container">
+            <div id="loading" style="text-align:center; padding:50px; color:#555;">데이터를 불러오는 중...</div>
+        </div>
+
+        <div id="settingsView" class="list-container" style="display:none; padding-top:20px;">
+            <div style="background:var(--bg2); padding:20px; border-radius:10px;">
+                <h3 style="margin-bottom:15px; font-size:16px;">버셀 프록시 설정</h3>
+                <input type="password" id="appKey" placeholder="App Key 입력">
+                <input type="password" id="appSecret" placeholder="App Secret 입력">
+                <button class="btn-save" onclick="handleAuth()">연결 및 토큰 발급</button>
+                <div id="authStatus" style="margin-top:10px; font-size:12px; text-align:center; color:#888;">상태: 대기 중</div>
+            </div>
+            <button class="btn-save" onclick="fetchData()" style="margin-top:15px; background:#222; border:1px solid var(--blue);">📡 실시간 데이터 새로고침</button>
+        </div>
+
+        <div class="nav">
+            <div class="nav-item active" id="nav-screen" onclick="switchMain('screen')">📊 스크리너</div>
+            <div class="nav-item" id="nav-set" onclick="switchMain('set')">⚙️ 설정</div>
+        </div>
     </div>
-  </div>
 
-  <div class="content">
-    <div id="section-list" class="view-section active">
-      <div id="stockListContainer"></div>
-    </div>
+    <script>
+        let stocks = [];
+        let currentMarket = 'KOSPI';
+        let historyData = JSON.parse(localStorage.getItem('my_stock_history') || '{}');
 
-    <div id="section-settings" class="view-section">
-      <div style="background:var(--bg2); padding:20px; border-radius:var(--radius); border:1px solid var(--border);">
-        <h3 style="margin-bottom:15px; font-size:16
+        // 1. 메인 뷰 전환 (스크리너 vs 설정)
+        function switchMain(mode) {
+            document.getElementById('listView').style.display = mode === 'screen' ? 'block' : 'none';
+            document.getElementById('mainTabs').style.display = mode === 'screen' ? 'flex' : 'none';
+            document.getElementById('settingsView').style.display = mode === 'set' ? 'block' : 'none';
+            
+            document.getElementById('nav-screen').classList.toggle('active', mode === 'screen');
+            document.getElementById('nav-set').classList.toggle('active', mode === 'set');
+        }
+
+        // 2. 마켓 탭 전환
+        function changeMarket(m) {
+            currentMarket = m;
+            document.querySelectorAll('.tab').forEach(t => {
+                t.classList.toggle('active', t.innerText.includes(m === 'HISTORY' ? '기록' : m));
+            });
+            render();
+        }
+
+        // 3. API 인증 (토큰 발급)
+        async function handleAuth() {
+            const key = document.getElementById('appKey').value.trim();
+            const sec = document.getElementById('appSecret').value.trim();
+            const status = document.getElementById('authStatus');
+            
+            status.innerText = "연결 중...";
+            try {
+                const res = await fetch('/api/kis-proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'getToken', appkey: key, appsecret: sec })
+                });
+                const d = await res.json();
+                if(d.access_token) {
+                    localStorage.setItem('k', key);
+                    localStorage.setItem('s', sec);
+                    localStorage.setItem('t', d.access_token);
+                    status.innerText = "✅ 연결 성공! 데이터를 새로고침 하세요.";
+                } else { status.innerText = "❌ 인증 실패"; }
+            } catch(e) { status.innerText = "❌ 에러: " + e.message; }
+        }
+
+        // 4. 데이터 수신
+        async function fetchData() {
+            const token = localStorage.getItem('t');
+            if(!token) return alert("설정에서 먼저 연결하세요.");
+
+            try {
+                const res = await fetch('/api/kis-proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'volumeRank', 
+                        market: currentMarket === 'HISTORY' ? 'KOSPI' : currentMarket,
+                        token: token, appkey: localStorage.getItem('k'), appsecret: localStorage.getItem('s')
+                    })
+                });
+                const d = await res.json();
+                if(d.output) {
+                    stocks = d.output;
+                    render();
+                    alert("최신 데이터를 가져왔습니다.");
+                    switchMain('screen');
+                }
+            } catch(e) { alert("데이터 수신 오류"); }
+        }
+
+        // 5. 화면 렌더링 (상세 진입 포함)
+        function render() {
+            const container = document.getElementById('listView');
+            container.innerHTML = '';
+            
+            let data = stocks;
+            if(currentMarket === 'HISTORY') {
+                data = stocks.filter(s => historyData[s.mksc_shrn_iscd]);
+            }
+
+            if(data.length === 0) {
+                container.innerHTML = '<div style="text-align:center; padding:50px; color:#555;">데이터가 없습니다.<br>설정에서 새로고침 하세요.</div>';
+                return;
+            }
+
+            data.forEach(s => {
+                const id = s.mksc_shrn_iscd;
+                const h = historyData[id] || { score: '', memo: '' };
+                const isUp = parseFloat(s.prdy_ctrt) >= 0;
+
+                const card = document.createElement('div');
+                card.className = 'stock-card';
+                card.innerHTML = `
+                    <div class="card-info" onclick="toggleDetail('${id}')">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <span style="font-weight:bold;">${s.hts_kor_isnm}</span>
+                            <span class="${isUp?'price-up':'price-down'}">${parseInt(s.stck_prpr).toLocaleString()}원</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; font-size:12px; color:#888;">
+                            <span>코드: ${id}</span>
+                            <span class="${isUp?'price-up':'price-down'}">${isUp?'+':''}${s.prdy_ctrt}%</span>
+                        </div>
+                    </div>
+                    <div class="detail-area" id="detail-${id}">
+                        <div style="font-size:12px; margin-bottom:10px; color:var(--blue);">나의 종목 분석 기록</div>
+                        <input type="number" id="sc-${id}" placeholder="나의 점수 (0~100)" value="${h.score}">
+                        <textarea id="mm-${id}" rows="3" placeholder="기억할 메모...">${h.memo}</textarea>
+                        <button class="btn-save" onclick="saveRecord('${id}')">💾 저장하기</button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // 6. 상세 보기 토글
+        function toggleDetail(id) {
+            const el = document.getElementById(`detail-${id}`);
+            el.classList.toggle('active');
+        }
+
+        // 7. 점수 저장
+        function saveRecord(id) {
+            const sc = document.getElementById(`sc-${id}`).value;
+            const mm = document.getElementById(`mm-${id}`).value;
+            historyData[id] = { score: sc, memo: mm };
+            localStorage.setItem('my_stock_history', JSON.stringify(historyData));
+            alert('기록되었습니다!');
+        }
+
+        // 시계
+        setInterval(() => {
+            document.getElementById('clock').innerText = new Date().toLocaleTimeString('ko-KR', {hour12:false});
+        }, 1000);
+
+        // 초기 실행
+        document.getElementById('appKey').value = localStorage.getItem('k') || '';
+        document.getElementById('appSecret').value = localStorage.getItem('s') || '';
+        render();
+    </script>
+</body>
+</html>
