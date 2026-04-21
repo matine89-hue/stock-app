@@ -118,29 +118,52 @@
         }
 
         // 4. 데이터 수신
-        async function fetchData() {
-            const token = localStorage.getItem('t');
-            if(!token) return alert("설정에서 먼저 연결하세요.");
+     // index.html 내의 fetchData 함수를 이 내용으로 교체하거나 전체를 덮어씌워주세요.
 
-            try {
-                const res = await fetch('/api/kis-proxy', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'volumeRank', 
-                        market: currentMarket === 'HISTORY' ? 'KOSPI' : currentMarket,
-                        token: token, appkey: localStorage.getItem('k'), appsecret: localStorage.getItem('s')
-                    })
-                });
-                const d = await res.json();
-                if(d.output) {
-                    stocks = d.output;
-                    render();
-                    alert("최신 데이터를 가져왔습니다.");
-                    switchMain('screen');
-                }
-            } catch(e) { alert("데이터 수신 오류"); }
+async function fetchData() {
+    const token = localStorage.getItem('t');
+    const key = localStorage.getItem('k');
+    const sec = localStorage.getItem('s');
+    
+    if(!token || !key || !sec) return alert("설정에서 먼저 연결(토큰 발급)을 완료해주세요.");
+
+    const loadingEl = document.getElementById('loading');
+    if(loadingEl) loadingEl.innerText = "📡 한국투자증권에서 데이터를 가져오는 중...";
+
+    try {
+        const res = await fetch('/api/kis-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'volumeRank', 
+                market: currentMarket === 'HISTORY' ? 'KOSPI' : currentMarket, // 기록 탭이어도 일단 전체를 받아옴
+                token: token, 
+                appkey: key, 
+                appsecret: sec
+            })
+        });
+
+        const d = await res.json();
+        
+        // 데이터 구조 확인 및 강제 할당
+        if(d && d.output && Array.isArray(d.output)) {
+            stocks = d.output; // 전역 변수에 저장
+            console.log("수신 데이터:", stocks); // 디버깅용
+            
+            // 뷰 전환 및 화면 갱신
+            switchMain('screen'); 
+            render(); 
+            
+            alert(`${stocks.length}개의 종목 데이터를 불러왔습니다!`);
+        } else {
+            console.error("응답 에러:", d);
+            alert("데이터 구조에 문제가 있습니다: " + (d.msg1 || "응답 없음"));
         }
+    } catch(e) {
+        console.error("통신 에러:", e);
+        alert("데이터 수신 오류: " + e.message);
+    }
+}
 
         // 5. 화면 렌더링 (상세 진입 포함)
         function render() {
