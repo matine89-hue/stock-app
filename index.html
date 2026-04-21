@@ -18,50 +18,55 @@
   --radius: 10px; --radius-sm: 6px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; overflow-x: hidden; }
 .mono { font-family: 'JetBrains Mono', monospace; }
 .app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative; }
 @media(min-width: 900px) { .app { max-width: 900px; } }
 
-/* Header & Market Bar */
+/* Header & UI */
 .header { padding: 16px 16px 0; display: flex; align-items: center; justify-content: space-between; }
 .logo { font-size: 18px; font-weight: 700; }
 .logo span { color: var(--blue); }
+.time-badge { font-size: 11px; color: var(--text2); background: var(--bg3); padding: 4px 10px; border-radius: 99px; border: 0.5px solid var(--border2); }
 .market-bar { margin: 12px 16px 0; background: var(--bg3); border-radius: var(--radius); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; border: 0.5px solid var(--border); }
 
 /* Tabs */
 .tabs-wrap { padding: 14px 16px 0; }
 .tabs { display: flex; gap: 6px; background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 4px; }
-.tab { flex: 1; text-align: center; padding: 8px 4px; font-size: 13px; font-weight: 500; border-radius: 7px; cursor: pointer; color: var(--text2); transition: all 0.2s; }
+.tab { flex: 1; text-align: center; padding: 8px 4px; font-size: 12px; font-weight: 500; border-radius: 7px; cursor: pointer; color: var(--text2); transition: all 0.2s; }
 .tab.active { background: var(--bg4); color: var(--text); border: 0.5px solid var(--border2); }
 
-/* List & Cards */
+/* Stock List & Detail Card */
 .stock-list { padding: 10px 16px; flex: 1; }
-.stock-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; padding: 12px 14px; cursor: pointer; }
-.stock-card:hover { border-color: var(--border2); }
+.stock-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); margin-bottom: 10px; overflow: hidden; transition: transform 0.1s; }
+.card-content { padding: 14px; cursor: pointer; }
 .stock-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.sname { font-weight: 700; font-size: 14px; }
-.price-main { font-family: 'JetBrains Mono'; font-weight: 700; }
-.price-chg { font-size: 11px; }
+.sname { font-weight: 700; font-size: 15px; }
+.price-main { font-family: 'JetBrains Mono'; font-weight: 700; font-size: 15px; }
 .up { color: var(--red); } .dn { color: var(--blue); }
 
-/* Detail View */
-.stock-detail { margin-top: 10px; padding-top: 10px; border-top: 0.5px solid var(--border); font-size: 12px; color: var(--text2); }
-.metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 10px 0; }
-.metric-box { background: var(--bg3); padding: 8px; border-radius: var(--radius-sm); text-align: center; }
-.m-label { font-size: 10px; color: var(--text3); }
-.m-val { font-weight: 700; color: var(--text); display: block; }
+/* Detailed Stats Section */
+.detail-expand { display: none; background: var(--bg3); padding: 14px; border-top: 0.5px solid var(--border2); }
+.detail-expand.active { display: block; }
+.metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
+.metric-box { background: var(--bg4); padding: 8px 4px; border-radius: var(--radius-sm); text-align: center; }
+.m-label { font-size: 9px; color: var(--text3); display: block; margin-bottom: 2px; }
+.m-val { font-weight: 700; color: var(--text); font-size: 11px; }
+
+/* Score & Memo Form */
+.record-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+input, textarea { width: 100%; background: var(--bg); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); color: var(--text); padding: 8px; font-size: 13px; outline: none; }
+.btn-group { display: flex; gap: 6px; margin-top: 5px; }
+.btn-sm { flex: 1; padding: 8px; font-size: 12px; border-radius: var(--radius-sm); cursor: pointer; border: none; font-weight: 600; }
 
 /* Bottom Nav */
-.bottom-nav { position: sticky; bottom: 0; background: var(--bg2); border-top: 0.5px solid var(--border); display: flex; padding: 8px 0; }
+.bottom-nav { position: sticky; bottom: 0; background: var(--bg2); border-top: 0.5px solid var(--border); display: flex; padding: 8px 0; z-index: 100; }
 .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; color: var(--text3); font-size: 10px; }
 .nav-item.active { color: var(--blue); }
 .nav-icon { font-size: 18px; }
 
-/* Settings */
-input { width: 100%; background: var(--bg3); border: 0.5px solid var(--border2); border-radius: var(--radius-sm); color: var(--text); padding: 10px; outline: none; margin-bottom: 10px; }
-button { width: 100%; padding: 12px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 700; border: none; margin-bottom: 10px; transition: opacity 0.2s; }
-button:active { opacity: 0.7; }
+/* Settings View */
+#settingsView { padding: 16px; display: none; }
 </style>
 </head>
 <body>
@@ -73,175 +78,21 @@ button:active { opacity: 0.7; }
 
   <div class="market-bar">
     <div style="font-size:11px; color:var(--text2);">● 실시간 연결 상태</div>
-    <div id="marketIndices" style="font-size:11px; font-family:'JetBrains Mono';">KOSPI -- | KOSDAQ --</div>
+    <div id="marketIndices" style="font-size:11px; font-family:'JetBrains Mono';">연결 필요</div>
   </div>
 
   <div class="tabs-wrap" id="mainTabs">
     <div class="tabs">
-      <div class="tab active" onclick="switchMainTab(0)">📊 코스피</div>
-      <div class="tab" onclick="switchMainTab(1)">📈 코스닥</div>
-      <div class="tab" onclick="switchMainTab(2)">⭐ 관심</div>
-      <div class="tab" onclick="switchMainTab(3)">📋 기록</div>
+      <div class="tab active" onclick="switchTab(0)">📊 코스피</div>
+      <div class="tab" onclick="switchTab(1)">📈 코스닥</div>
+      <div class="tab" onclick="switchTab(2)">⭐ 관심</div>
+      <div class="tab" onclick="switchTab(3)">📋 점수기록</div>
     </div>
   </div>
 
   <div id="listView" class="stock-list"></div>
 
-  <div id="settingsView" style="display:none; padding:16px;">
+  <div id="settingsView">
     <div style="background:var(--bg2); padding:16px; border-radius:var(--radius); border:0.5px solid var(--border);">
       <h4 style="margin-bottom:12px; font-size:14px; color:var(--blue);">KIS API 실시간 연결</h4>
-      <input id="inputAppKey" type="password" placeholder="App Key">
-      <input id="inputAppSecret" type="password" placeholder="App Secret">
-      <button onclick="saveAndConnect()" style="background:var(--blue-dim); color:var(--blue); border:0.5px solid var(--blue);">저장 및 토큰 재발급</button>
-      <div id="apiStatusText" style="text-align:center; font-size:12px; color:var(--text3);">상태: 대기 중</div>
-    </div>
-    
-    <div style="margin-top:20px;">
-      <button id="fetchBtn" onclick="fetchLiveData()" style="background:var(--green-dim); color:var(--green); border:0.5px solid var(--green);">📡 실시간 데이터 불러오기</button>
-      <div id="fetchStatus" style="margin-top:10px; font-size:12px; text-align:center;"></div>
-    </div>
-  </div>
-
-  <div class="bottom-nav">
-    <div class="nav-item active" id="nav0" onclick="switchMainTab(0)">
-      <div class="nav-icon">📊</div><div>스크리너</div>
-    </div>
-    <div class="nav-item" id="nav2" onclick="switchMainTab(2)">
-      <div class="nav-icon">⭐</div><div>관심</div>
-    </div>
-    <div class="nav-item" id="nav3" onclick="switchMainTab(3)">
-      <div class="nav-icon">📋</div><div>점수기록</div>
-    </div>
-    <div class="nav-item" id="nav4" onclick="switchMainTab(4)">
-      <div class="nav-icon">⚙️</div><div>설정</div>
-    </div>
-  </div>
-</div>
-
-<script>
-// ── Data & Config ──────────────────────────────────────
-let currentMarket = 'KOSPI';
-let KOSPI_STOCKS = [];
-let KOSDAQ_STOCKS = [];
-let WATCHLIST = JSON.parse(localStorage.getItem('watchlist') || '[]');
-let KIS_APP_KEY = localStorage.getItem('kis_app_key') || '';
-let KIS_APP_SECRET = localStorage.getItem('kis_app_secret') || '';
-let KIS_ACCESS_TOKEN = localStorage.getItem('kis_access_token') || '';
-
-const PROXY_URL = '/api/kis-proxy';
-
-// ── Tab Logic ─────────────────────────────────────────
-function switchMainTab(idx) {
-  const views = ['listView', 'settingsView'];
-  const navs = document.querySelectorAll('.nav-item');
-  const tabs = document.querySelectorAll('.tab');
-  
-  navs.forEach((n, i) => n.classList.toggle('active', [0,2,3,4][i] === idx || (idx<2 && i===0)));
-  
-  if(idx === 4) {
-    document.getElementById('listView').style.display = 'none';
-    document.getElementById('settingsView').style.display = 'block';
-  } else {
-    document.getElementById('listView').style.display = 'block';
-    document.getElementById('settingsView').style.display = 'none';
-    if(idx === 0) currentMarket = 'KOSPI';
-    if(idx === 1) currentMarket = 'KOSDAQ';
-    if(idx === 2) currentMarket = 'WATCH';
-    if(idx === 3) currentMarket = 'HISTORY';
-    
-    tabs.forEach((t, i) => t.classList.toggle('active', i === idx && idx < 4));
-    renderList();
-  }
-}
-
-// ── API Core ──────────────────────────────────────────
-async function saveAndConnect() {
-  const key = document.getElementById('inputAppKey').value.trim();
-  const sec = document.getElementById('inputAppSecret').value.trim();
-  if(!key || !sec) return alert("키 정보를 입력하세요.");
-
-  KIS_APP_KEY = key; KIS_APP_SECRET = sec;
-  localStorage.setItem('kis_app_key', key);
-  localStorage.setItem('kis_app_secret', sec);
-
-  try {
-    const res = await fetch(PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'getToken', appkey: key, appsecret: sec })
-    });
-    const data = await res.json();
-    if(data.access_token) {
-      KIS_ACCESS_TOKEN = data.access_token;
-      localStorage.setItem('kis_access_token', data.access_token);
-      document.getElementById('apiStatusText').textContent = "✅ 연결 성공!";
-    } else {
-      alert("연결 실패: " + data.error_description);
-    }
-  } catch(e) { alert("에러: " + e.message); }
-}
-
-async function fetchLiveData() {
-  const btn = document.getElementById('fetchBtn');
-  const status = document.getElementById('fetchStatus');
-  if(!KIS_ACCESS_TOKEN) return alert("설정에서 먼저 연결하세요.");
-
-  btn.disabled = true;
-  status.textContent = "📡 거래량 상위 종목 분석 중...";
-
-  try {
-    const res1 = await fetch(PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'volumeRank', market: 'KOSPI', appkey: KIS_APP_KEY, appsecret: KIS_APP_SECRET, token: KIS_ACCESS_TOKEN })
-    });
-    const data1 = await res1.json();
-    
-    if(data1.output) {
-      KOSPI_STOCKS = data1.output.slice(0, 15).map(s => ({
-        id: s.mksc_shrn_iscd,
-        name: s.hts_kor_isnm,
-        price: parseInt(s.stck_prpr),
-        chg: parseFloat(s.prdy_ctrt),
-        vol: parseInt(s.acml_vol).toLocaleString(),
-        pbr: '1.2', per: '15.4', roe: '8.5' // 상세 재무는 추가 API 필요하므로 기본값 세팅
-      }));
-      status.textContent = "✅ 업데이트 완료!";
-      renderList();
-    } else {
-      status.textContent = "❌ 데이터 형식 오류";
-    }
-  } catch(e) { status.textContent = "❌ 에러: " + e.message; }
-  btn.disabled = false;
-}
-
-// ── Rendering ────────────────────────────────────────
-function renderList() {
-  const container = document.getElementById('listView');
-  container.innerHTML = '';
-  
-  let targetData = [];
-  if(currentMarket === 'KOSPI') targetData = KOSPI_STOCKS;
-  else if(currentMarket === 'KOSDAQ') targetData = KOSDAQ_STOCKS;
-  else if(currentMarket === 'WATCH') targetData = KOSPI_STOCKS.filter(s => WATCHLIST.includes(s.id));
-  else if(currentMarket === 'HISTORY') {
-    container.innerHTML = '<div style="padding:20px; color:var(--text3);">최근 점수 기록이 없습니다.</div>';
-    return;
-  }
-
-  if(targetData.length === 0) {
-    container.innerHTML = '<div style="text-align:center; padding:40px; color:var(--text3);">표시할 종목이 없습니다.<br>실시간 데이터를 불러오세요.</div>';
-    return;
-  }
-
-  targetData.forEach(s => {
-    const card = document.createElement('div');
-    card.className = 'stock-card';
-    const isUp = s.chg >= 0;
-    card.innerHTML = `
-      <div class="stock-top">
-        <div class="sname">${s.name} <span style="font-size:10px; color:var(--text3);">${s.id}</span></div>
-        <div class="price-main ${isUp?'up':'dn'}">${s.price.toLocaleString()}</div>
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text2);">
-        <div>
+      <input id="inputAppKey
