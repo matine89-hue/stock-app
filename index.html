@@ -1,194 +1,27 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>국장 스크리너</title>
-    <style>
-        :root { --bg: #0d0f14; --bg2: #1a1e28; --blue: #4a9eff; --text: #e8eaf0; --border: #2d3343; }
-        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 0; overflow-x: hidden; }
-        .app { max-width: 500px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+async function fetchData() {
+    const token = localStorage.getItem('t'), key = localStorage.getItem('k'), sec = localStorage.getItem('s');
+    if(!token) return alert("연결부터 하세요.");
+
+    try {
+        const res = await fetch('/api/kis-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'volumeRank', market: subTab, token, appkey: key, appsecret: sec })
+        });
+        const d = await res.json();
         
-        /* 헤더 */
-        .header { padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
-        .logo { font-weight: bold; font-size: 18px; }
-        .logo span { color: var(--blue); }
+        // 종목 리스트가 들어있는 곳 확인
+        const list = d.output || d.output1;
         
-        /* 상단 탭 (스크리너 전용) */
-        .tabs { display: flex; background: var(--bg2); margin: 15px; border-radius: 8px; padding: 4px; gap: 4px; border: 1px solid var(--border); }
-        .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; border-radius: 6px; font-size: 13px; color: #888; }
-        .tab.active { background: #30364d; color: var(--blue); font-weight: bold; }
-        
-        /* 컨텐츠 영역 */
-        .content { flex: 1; padding: 0 15px 100px; }
-        .view-section { display: none; }
-        .view-section.active { display: block; }
-
-        /* 카드 및 상세 */
-        .stock-card { background: var(--bg2); margin-bottom: 12px; border-radius: 10px; border: 1px solid var(--border); overflow: hidden; }
-        .card-info { padding: 16px; cursor: pointer; }
-        .detail-area { display: none; padding: 16px; background: #222736; border-top: 1px solid var(--border); }
-        .detail-area.active { display: block; }
-        
-        input, textarea { width: 100%; background: #0d0f14; border: 1px solid var(--border); color: #fff; padding: 12px; margin-bottom: 10px; border-radius: 6px; box-sizing: border-box; }
-        button { background: var(--blue); color: white; border: none; padding: 14px; border-radius: 6px; width: 100%; font-weight: bold; cursor: pointer; }
-
-        /* 하단 네비게이션 (클릭 범위 확장) */
-        .nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 500px; display: flex; background: var(--bg2); border-top: 1px solid var(--border); height: 70px; z-index: 9999; }
-        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #888; cursor: pointer; transition: 0.2s; }
-        .nav-item.active { color: var(--blue); background: rgba(74, 158, 255, 0.05); }
-        .nav-icon { font-size: 20px; margin-bottom: 4px; }
-        .nav-label { font-size: 11px; font-weight: bold; }
-    </style>
-</head>
-<body>
-    <div class="app">
-        <div class="header">
-            <div class="logo">국장<span>스크리너</span></div>
-            <div id="clock" style="font-family: monospace; font-size: 12px; color: #888;">00:00:00</div>
-        </div>
-
-        <div id="view-screen" class="view-section active">
-            <div class="tabs">
-                <div class="tab active" onclick="changeSubTab('KOSPI')">코스피</div>
-                <div class="tab" onclick="changeSubTab('KOSDAQ')">코스닥</div>
-                <div class="tab" onclick="changeSubTab('HISTORY')">기록</div>
-            </div>
-            <div id="stockList"></div>
-        </div>
-
-        <div id="view-settings" class="view-section">
-            <div style="padding: 20px 0;">
-                <div style="background:var(--bg2); padding:20px; border-radius:10px; border: 1px solid var(--border);">
-                    <h3 style="margin-bottom:15px; font-size:16px;">API 연결 설정</h3>
-                    <input type="password" id="appKey" placeholder="App Key">
-                    <input type="password" id="appSecret" placeholder="App Secret">
-                    <button onclick="handleConnect()">설정 저장 및 연결</button>
-                    <div id="authStatus" style="margin-top:12px; font-size:12px; text-align:center; color:#888;">상태: 대기 중</div>
-                </div>
-                <button onclick="fetchData()" style="margin-top:15px; background: #222; border: 1px solid var(--blue);">📡 실시간 데이터 새로고침</button>
-            </div>
-        </div>
-
-        <div class="nav">
-            <div class="nav-item active" id="btn-nav-screen" onclick="showMainView('screen')">
-                <div class="nav-icon">📊</div><div class="nav-label">스크리너</div>
-            </div>
-            <div class="nav-item" id="btn-nav-settings" onclick="showMainView('settings')">
-                <div class="nav-icon">⚙️</div><div class="nav-label">설정</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        let stocks = [], subTab = 'KOSPI';
-        let history = JSON.parse(localStorage.getItem('my_history') || '{}');
-
-        // 메인 화면 전환 (스크리너 <-> 설정)
-        function showMainView(target) {
-            document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            
-            if(target === 'screen') {
-                document.getElementById('view-screen').classList.add('active');
-                document.getElementById('btn-nav-screen').classList.add('active');
-            } else {
-                document.getElementById('view-settings').classList.add('active');
-                document.getElementById('btn-nav-settings').classList.add('active');
-            }
-        }
-
-        // 스크리너 내부 탭 전환
-        function changeSubTab(tab) {
-            subTab = tab;
-            document.querySelectorAll('.tab').forEach(t => {
-                t.classList.toggle('active', t.innerText.includes(tab === 'HISTORY' ? '기록' : tab));
-            });
+        if(list && Array.isArray(list) && list.length > 0) {
+            stocks = list;
             render();
+            showMainView('screen');
+        } else {
+            // 여기가 핵심입니다. 한투가 보낸 메시지를 그대로 보여줍니다.
+            const errorReason = d.msg1 || "알 수 없는 이유로 데이터가 오지 않았습니다.";
+            const errorCode = d.rt_cd || "코드없음";
+            alert(`⚠️ 한투 서버 응답\n[결과코드: ${errorCode}]\n내용: ${errorReason}\n\n*팁: 모의투자 계좌라면 실전계좌 키로 바꿔보세요!`);
         }
-
-        async function handleConnect() {
-            const k = document.getElementById('appKey').value, s = document.getElementById('appSecret').value;
-            const status = document.getElementById('authStatus');
-            status.innerText = "연결 시도 중...";
-            try {
-                const res = await fetch('/api/kis-proxy', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'getToken', appkey: k, appsecret: s })
-                });
-                const d = await res.json();
-                if(d.access_token) {
-                    localStorage.setItem('k', k); localStorage.setItem('s', s); localStorage.setItem('t', d.access_token);
-                    status.innerText = "✅ 연결 성공! 데이터를 불러오세요.";
-                } else { status.innerText = "❌ 실패: 키를 확인하세요."; }
-            } catch(e) { status.innerText = "❌ 서버 에러"; }
-        }
-
-        async function fetchData() {
-            const token = localStorage.getItem('t'), key = localStorage.getItem('k'), sec = localStorage.getItem('s');
-            if(!token) return alert("설정에서 연결부터 하세요.");
-            try {
-                const res = await fetch('/api/kis-proxy', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'volumeRank', market: subTab === 'HISTORY' ? 'KOSPI' : subTab, token, appkey: key, appsecret: sec })
-                });
-                const d = await res.json();
-                const final = d.output || d.output1 || d;
-                if(Array.isArray(final)) {
-                    stocks = final;
-                    render();
-                    showMainView('screen');
-                    alert("데이터 수신 완료!");
-                } else { alert("응답은 성공했으나 데이터가 비어있습니다."); }
-            } catch(e) { alert("통신 에러"); }
-        }
-
-        function render() {
-            const cont = document.getElementById('stockList');
-            cont.innerHTML = '';
-            let data = subTab === 'HISTORY' ? stocks.filter(s => history[s.mksc_shrn_iscd]) : stocks;
-
-            if(data.length === 0) {
-                cont.innerHTML = `<div style="text-align:center; padding:50px; color:#555;">${subTab === 'HISTORY' ? '기록된 종목이 없습니다.' : '데이터를 새로고침 하세요.'}</div>`;
-                return;
-            }
-
-            data.forEach(s => {
-                const id = s.mksc_shrn_iscd, h = history[id] || { score: '', memo: '' };
-                const card = document.createElement('div');
-                card.className = 'stock-card';
-                card.innerHTML = `
-                    <div class="card-info" onclick="toggleDetail('${id}')">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                            <span style="font-weight:bold;">${s.hts_kor_isnm}</span>
-                            <span style="color:${s.prdy_ctrt > 0 ? '#ff5c5c' : '#4a9eff'}">${parseInt(s.stck_prpr).toLocaleString()}원</span>
-                        </div>
-                        <div style="font-size:12px; color:#888;">${id} | ${s.prdy_ctrt}%</div>
-                    </div>
-                    <div class="detail-area" id="det-${id}">
-                        <input type="number" id="sc-${id}" placeholder="나의 점수" value="${h.score}">
-                        <textarea id="mm-${id}" placeholder="메모...">${h.memo}</textarea>
-                        <button onclick="saveRec('${id}')">기록 저장</button>
-                    </div>
-                `;
-                cont.appendChild(card);
-            });
-        }
-
-        function toggleDetail(id) { document.getElementById(`det-${id}`).classList.toggle('active'); }
-        
-        function saveRec(id) {
-            history[id] = { score: document.getElementById(`sc-${id}`).value, memo: document.getElementById(`mm-${id}`).value };
-            localStorage.setItem('my_history', JSON.stringify(history));
-            alert('저장 완료!');
-        }
-
-        setInterval(() => { document.getElementById('clock').innerText = new Date().toLocaleTimeString('ko-KR', {hour12:false}); }, 1000);
-        document.getElementById('appKey').value = localStorage.getItem('k') || '';
-        document.getElementById('appSecret').value = localStorage.getItem('s') || '';
-        render();
-    </script>
-</body>
-</html>
+    } catch(e) { alert("통신 실패: " + e.message); }
+}
