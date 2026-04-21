@@ -5,159 +5,145 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>국장 스크리너</title>
     <style>
-        :root { --bg: #0d0f14; --bg2: #1a1e28; --blue: #4a9eff; --text: #e8eaf0; --border: #2d3343; }
-        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        :root { --bg: #0d0f14; --bg2: #1a1e28; --blue: #4a9eff; --text: #e8eaf0; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 0; }
         
-        /* 뷰 섹션 */
-        .view { display: none; padding-bottom: 80px; }
+        /* [핵심] 메뉴를 화면 최상단에 고정 */
+        .top-nav { display: flex; background: #222; border-bottom: 2px solid var(--blue); position: sticky; top: 0; z-index: 99999; }
+        .nav-btn { flex: 1; padding: 20px; color: #fff; text-align: center; font-weight: bold; cursor: pointer; border: none; background: none; font-size: 16px; }
+        .nav-btn.active { background: var(--blue); }
+
+        .view { display: none; padding: 20px; }
         .view.active { display: block; }
 
-        /* 하단 바 - 절대 안 뚫리게 최상단 고정 */
-        .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; height: 70px; background: var(--bg2); border-top: 2px solid var(--border); display: flex; z-index: 999999; }
-        .nav-btn { flex: 1; border: none; background: none; color: #888; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
-        .nav-btn.active { color: var(--blue); background: rgba(74, 158, 255, 0.1); }
-        .nav-btn span { font-size: 12px; font-weight: bold; margin-top: 4px; }
-
-        /* 공통 스타일 */
-        .card { background: var(--bg2); margin: 10px; padding: 15px; border-radius: 10px; border: 1px solid var(--border); }
-        input, textarea { width: 100%; background: #000; border: 1px solid var(--border); color: #fff; padding: 12px; margin-bottom: 10px; border-radius: 6px; box-sizing: border-box; }
-        .main-btn { width: 100%; padding: 15px; background: var(--blue); color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .card { background: var(--bg2); padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #333; }
+        input { width: 100%; background: #000; border: 1px solid #444; color: #fff; padding: 15px; margin: 10px 0; border-radius: 5px; box-sizing: border-box; }
+        .btn { width: 100%; padding: 15px; background: var(--blue); color: #fff; border: none; border-radius: 5px; font-weight: bold; font-size: 16px; cursor: pointer; }
         
-        /* 상단 탭 */
-        .top-tabs { display: flex; background: var(--bg2); padding: 10px; gap: 5px; }
-        .t-tab { flex: 1; padding: 10px; text-align: center; background: #222; border-radius: 5px; font-size: 13px; }
-        .t-tab.active { background: var(--blue); color: #fff; }
+        .sub-tabs { display: flex; gap: 5px; margin-bottom: 15px; }
+        .s-tab { flex: 1; padding: 10px; background: #333; text-align: center; border-radius: 5px; font-size: 13px; }
+        .s-tab.active { background: #555; border: 1px solid var(--blue); }
     </style>
 </head>
 <body>
 
-    <div id="page-list" class="view active">
-        <div style="padding: 15px; font-weight: bold; font-size: 18px;">📊 국장 스크리너</div>
-        <div class="top-tabs">
-            <div class="t-tab active" onclick="setMarket('KOSPI')">코스피</div>
-            <div class="t-tab" onclick="setMarket('KOSDAQ')">코스닥</div>
-            <div class="t-tab" onclick="setMarket('HISTORY')">기록</div>
+    <div class="top-nav">
+        <div class="nav-btn active" id="btn-list" onclick="go('list')">📊 리스트</div>
+        <div class="nav-btn" id="btn-set" onclick="go('set')">⚙️ 설정</div>
+    </div>
+
+    <div id="p-list" class="view active">
+        <div class="sub-tabs">
+            <div class="s-tab active" onclick="setM('KOSPI')">코스피</div>
+            <div class="s-tab" onclick="setM('KOSDAQ')">코스닥</div>
+            <div class="s-tab" onclick="setM('HISTORY')">기록</div>
         </div>
         <div id="stockList"></div>
     </div>
 
-    <div id="page-set" class="view">
-        <div style="padding: 15px; font-weight: bold; font-size: 18px;">⚙️ 설정 및 연결</div>
+    <div id="p-set" class="view">
         <div class="card">
-            <label style="font-size:12px; color:#888;">App Key</label>
-            <input type="password" id="appKey">
-            <label style="font-size:12px; color:#888;">App Secret</label>
-            <input type="password" id="appSecret">
-            <button class="main-btn" onclick="saveKeys()">설정 저장 및 토큰 발급</button>
-            <p id="status" style="text-align:center; font-size:12px; margin-top:10px; color:#888;">상태: 대기 중</p>
+            <h3>API 연결</h3>
+            <input type="password" id="ak" placeholder="App Key">
+            <input type="password" id="as" placeholder="App Secret">
+            <button class="btn" onclick="save()">저장 및 토큰발급</button>
+            <p id="st" style="text-align:center; font-size:12px; color:#888; margin-top:10px;">상태: 대기</p>
         </div>
-        <div style="padding: 0 10px;">
-            <button class="main-btn" style="background:#333;" onclick="fetchStockData()">📡 실시간 데이터 새로고침</button>
-        </div>
-    </div>
-
-    <div class="bottom-nav">
-        <button class="nav-btn active" id="nb1" onclick="goPage('list')"><div>📊</div><span>스크리너</span></button>
-        <button class="nav-btn" id="nb2" onclick="goPage('set')"><div>⚙️</div><span>설정</span></button>
+        <button class="btn" style="background:#444;" onclick="load()">🔄 데이터 새로고침</button>
     </div>
 
     <script>
-        let stocks = [], currentM = 'KOSPI';
-        let history = JSON.parse(localStorage.getItem('my_h') || '{}');
+        let stocks = [], market = 'KOSPI';
+        let history = JSON.parse(localStorage.getItem('h_v1') || '{}');
 
-        // [핵심] 페이지 이동 함수 - 무조건 작동하게 설계
-        function goPage(p) {
+        // 페이지 전환 (강제성 부여)
+        function go(target) {
+            console.log("페이지 이동:", target);
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             
-            if(p === 'list') {
-                document.getElementById('page-list').classList.add('active');
-                document.getElementById('nb1').classList.add('active');
+            if(target === 'list') {
+                document.getElementById('p-list').className = 'view active';
+                document.getElementById('btn-list').className = 'nav-btn active';
             } else {
-                document.getElementById('page-set').classList.add('active');
-                document.getElementById('nb2').classList.add('active');
+                document.getElementById('p-set').className = 'view active';
+                document.getElementById('btn-set').className = 'nav-btn active';
             }
         }
 
-        function setMarket(m) {
-            currentM = m;
-            document.querySelectorAll('.t-tab').forEach(t => {
-                t.classList.toggle('active', t.innerText.includes(m === 'HISTORY' ? '기록' : m));
-            });
+        function setM(m) {
+            market = m;
+            document.querySelectorAll('.s-tab').forEach(t => t.classList.toggle('active', t.innerText.includes(m==='HISTORY'?'기록':m)));
             render();
         }
 
-        async function saveKeys() {
-            const k = document.getElementById('appKey').value, s = document.getElementById('appSecret').value;
-            const st = document.getElementById('status');
-            st.innerText = "토큰 발급 중...";
+        async function save() {
+            const k = document.getElementById('ak').value, s = document.getElementById('as').value;
+            document.getElementById('st').innerText = "시도 중...";
             try {
-                const res = await fetch('/api/kis-proxy', {
+                const r = await fetch('/api/kis-proxy', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'getToken', appkey: k, appsecret: s })
                 });
-                const d = await res.json();
+                const d = await r.json();
                 if(d.access_token) {
                     localStorage.setItem('k', k); localStorage.setItem('s', s); localStorage.setItem('t', d.access_token);
-                    st.innerText = "✅ 연결 성공!";
-                } else { st.innerText = "❌ 인증 실패 (키 확인)"; }
-            } catch(e) { st.innerText = "❌ 서버 에러"; }
+                    document.getElementById('st').innerText = "✅ 연결 성공!";
+                } else { document.getElementById('st').innerText = "❌ 실패: 키 확인"; }
+            } catch(e) { alert("서버 에러"); }
         }
 
-        async function fetchStockData() {
+        async function load() {
             const t = localStorage.getItem('t'), k = localStorage.getItem('k'), s = localStorage.getItem('s');
-            if(!t) return alert("연결부터 하세요.");
+            if(!t) return alert("설정부터 하세요.");
             try {
-                const res = await fetch('/api/kis-proxy', {
+                const r = await fetch('/api/kis-proxy', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'volumeRank', market: currentM==='HISTORY'?'KOSPI':currentM, token: t, appkey: k, appsecret: s })
+                    body: JSON.stringify({ action: 'volumeRank', market: market==='HISTORY'?'KOSPI':market, token: t, appkey: k, appsecret: s })
                 });
-                const d = await res.json();
-                const list = d.output || d.output1;
-                if(list && Array.isArray(list)) {
-                    stocks = list;
-                    render();
-                    goPage('list');
-                    alert("업데이트 완료!");
-                } else {
-                    alert("한투 응답: " + (d.msg1 || "데이터 없음"));
-                }
-            } catch(e) { alert("통신 에러"); }
+                const d = await r.json();
+                const o = d.output || d.output1;
+                if(o && Array.isArray(o)) {
+                    stocks = o; render(); go('list'); alert("완료");
+                } else { alert("데이터 없음: " + (d.msg1 || "확인불가")); }
+            } catch(e) { alert("통신실패"); }
         }
 
         function render() {
-            const cont = document.getElementById('stockList');
-            cont.innerHTML = '';
-            let data = currentM === 'HISTORY' ? stocks.filter(i => history[i.mksc_shrn_iscd]) : stocks;
-
-            data.forEach(s => {
+            const c = document.getElementById('stockList');
+            c.innerHTML = '';
+            let d = market === 'HISTORY' ? stocks.filter(i => history[i.mksc_shrn_iscd]) : stocks;
+            d.forEach(s => {
                 const id = s.mksc_shrn_iscd, h = history[id] || {sc:'', mm:''};
-                const div = document.createElement('div');
-                div.className = 'card';
-                div.innerHTML = `
-                    <div onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display==='block'?'none':'block'">
-                        <div style="display:flex; justify-content:space-between;">
-                            <b>${s.hts_kor_isnm}</b>
-                            <span style="color:${s.prdy_ctrt>0?'#ff5c5c':'#4a9eff'}">${parseInt(s.stck_prpr).toLocaleString()}원</span>
-                        </div>
-                        <div style="font-size:12px; color:#888; margin-top:5px;">${id} | ${s.prdy_ctrt}%</div>
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div onclick="const n=this.nextElementSibling; n.style.display=n.style.display==='block'?'none':'block'">
+                        <div style="display:flex; justify-content:space-between;"><b>${s.hts_kor_isnm}</b><span>${parseInt(s.stck_prpr).toLocaleString()}원</span></div>
+                        <div style="font-size:12px; color:#888;">${id} | ${s.prdy_ctrt}%</div>
                     </div>
-                    <div style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #333;">
+                    <div style="display:none; margin-top:10px; border-top:1px solid #444; padding-top:10px;">
                         <input type="number" id="sc-${id}" placeholder="점수" value="${h.sc}">
-                        <textarea id="mm-${id}" placeholder="메모...">${h.mm}</textarea>
-                        <button class="main-btn" style="padding:8px;" onclick="saveRec('${id}')">저장</button>
+                        <textarea id="mm-${id}" style="width:100%; background:#000; color:#fff; border:1px solid #444; padding:10px; border-radius:5px;">${h.mm}</textarea>
+                        <button class="btn" style="padding:10px; margin-top:5px;" onclick="saveH('${id}')">저장</button>
                     </div>
                 `;
-                cont.appendChild(div);
+                c.appendChild(card);
             });
         }
 
-        function saveRec(id) {
+        function saveH(id) {
             history[id] = { sc: document.getElementById(`sc-${id}`).value, mm: document.getElementById(`mm-${id}`).value };
-            localStorage.setItem('my_h', JSON.stringify(history));
+            localStorage.setItem('h_v1', JSON.stringify(history));
             alert('저장됨');
         }
 
-        document.getElementById('appKey').value = localStorage.getItem('k') || '';
+        // 초기 세팅
+        document.getElementById('ak').value = localStorage.getItem('k') || '';
+        document.getElementById('as').value = localStorage.getItem('s') || '';
+        render();
+    </script>
+</body>
+</html>
