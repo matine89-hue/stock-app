@@ -364,7 +364,7 @@ function updateApiStatus(state, msg) {
   if (!dot || !txt) return;
   var colors = { ok:'var(--green)', error:'var(--red)', loading:'var(--amber)', none:'var(--text3)' };
   dot.style.background = colors[state] || colors.none;
-  if (state === 'loading') dot.style.animation = 'pulse 1s infinite';
+  if (state === 'loading') { dot.style.animation = 'pulse 1s infinite'; }
   else dot.style.animation = '';
   txt.textContent = msg;
   txt.style.color = colors[state] || 'var(--text2)';
@@ -766,17 +766,17 @@ setInterval(updateClock, 10000);
 function switchMainTab(idx) {
   currentMainTab = idx;
   // tabs (only 0-3 in tab bar)
-  document.querySelectorAll('.tabs .tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+  document.querySelectorAll('.tabs .tab').forEach(function(t,i){ t.classList.toggle('active', i===idx); });
   // bottom nav
-  [0,2,3,4].forEach((n,i) => {
-    const el = document.getElementById('nav'+n);
+  [0,2,3,4].forEach(function(n){
+    var el = document.getElementById('nav'+n);
     if(el) el.classList.toggle('active', n===idx);
   });
   // filter row
   document.getElementById('filterRow').style.display = (idx<=1) ? 'flex' : 'none';
   // settings panel vs stock list
-  const sp = document.getElementById('settingsPanel');
-  const sl = document.getElementById('stockList');
+  var sp = document.getElementById('settingsPanel');
+  var sl = document.getElementById('stockList');
   if(idx===4) {
     if(sp) sp.style.display='block';
     if(sl) sl.style.display='none';
@@ -790,7 +790,7 @@ function switchMainTab(idx) {
 
 function setFilter(f, el) {
   currentFilter = f;
-  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.remove('active'); });
   el.classList.add('active');
   renderList();
 }
@@ -829,12 +829,12 @@ function applyFilter(stocks) {
 
 // ── Render ─────────────────────────────────────────────────────────
 function renderList() {
-  const el = document.getElementById('stockList');
+  var el = document.getElementById('stockList');
   if(currentMainTab===2) { renderWatchlist(el); return; }
   if(currentMainTab===3) { renderHistory(el); return; }
-  const stocks = applyFilter(currentMainTab===0 ? KOSPI_STOCKS : KOSDAQ_STOCKS);
+  var stocks = applyFilter(currentMainTab===0 ? KOSPI_STOCKS : KOSDAQ_STOCKS);
   if(stocks.length===0) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">해당 조건의 종목이 없습니다</div></div>'; return; }
-  el.innerHTML = stocks.map((s,i) => renderStockCard(s, i+1)).join('');
+  el.innerHTML = stocks.map(function(s,i){ return renderStockCard(s, i+1); }).join('');
 }
 
 function renderStockCard(s, rank) {
@@ -886,7 +886,7 @@ function renderDetail(s) {
 }
 
 function renderAnalysis(s) {
-  const mf = (v, good, bad) => {
+  var mf = function(v, good, bad) {
     if(v===null||v===undefined) return '';
     if(typeof good === 'function') return good(v) ? 'good' : (bad && bad(v) ? 'bad' : 'warn');
     return '';
@@ -1000,7 +1000,7 @@ function renderWatchlist(el) {
   }
   const all = [...KOSPI_STOCKS, ...KOSDAQ_STOCKS];
   const watched = watchlist.map(id => all.find(s=>s.id===id)).filter(Boolean);
-  el.innerHTML = watched.map((s,i) => renderStockCard(s, i+1)).join('');
+  el.innerHTML = watched.map(function(s,i){ return renderStockCard(s, i+1); }).join('');
 }
 
 function renderHistory(el) {
