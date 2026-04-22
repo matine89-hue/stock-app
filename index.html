@@ -559,36 +559,38 @@ async function fetchLiveData() {
       var sampleMap = {};
       sampleArr.forEach(function(s) { sampleMap[s.id] = s; });
       return rawList.map(function(item) {
-        var code  = item.mksc_shrn_iscd || item.stck_shrn_iscd || '';
-        var name  = item.hts_kor_isnm || '';
-        var price = parseInt(item.stck_prpr || 0);
-        var chg   = parseFloat(item.prdy_ctrt || 0);
-        // 거래량 필드: 순위API는 acml_vol, 현재가API는 acml_vol
+        var code   = item.mksc_shrn_iscd || item.stck_shrn_iscd || '';
+        var name   = item.hts_kor_isnm || '';
+        // stck_prpr: 거래량순위 API 응답에 있음. 0이면 장외시간이나 이상종목
+        var price  = parseInt(item.stck_prpr || 0);
+        var chg    = parseFloat(item.prdy_ctrt || 0);
         var volNum = parseInt(item.acml_vol || 0);
-        var vol   = volNum > 0 ? (volNum >= 10000 ? Math.round(volNum/10000) + '만' : volNum.toLocaleString()) + '주' : '—';
-        // 52주 고가 대비 현재가 등락률
-        var w52   = parseFloat(item.d250_hgpr_vrss_prpr_rate || item.w52_hgpr_vrss_prpr_ctrt || 0);
+        var vol    = volNum > 0
+          ? (volNum >= 10000 ? Math.round(volNum/10000) + '만' : volNum.toLocaleString()) + '주'
+          : '—';
+        // 52주 고가 대비 등락률 (거래량순위 API에는 없는 경우가 많음 — 클릭 시 로드)
+        var w52 = parseFloat(item.d250_hgpr_vrss_prpr_rate || 0);
 
         var base = sampleMap[code] || {
-          sector: item.bstp_kor_isnm || item.rprs_mrkt_kor_name || '기타',
-          intro: name + ' — 실시간 거래량 상위 종목입니다. (재무정보는 종목 클릭 시 로드)',
-          tags: ['거래량상위'],
-          news: [],
-          history: [],
-          pbr: parseFloat(item.pbr || 0),
-          per: parseFloat(item.per || 0),
-          roe: parseFloat(item.roe || 0),
-          debt: 0, ev: 0, div: parseFloat(item.stck_divi || 0),
-          foreign: '+0억',
-          shortScore: 3.0, midScore: 3.0
+          sector:     item.bstp_kor_isnm || '기타',
+          intro:      name + ' — 거래량 상위 종목입니다. 클릭하면 재무정보가 로드됩니다.',
+          tags:       ['거래량상위'],
+          news:       [],
+          history:    [],
+          pbr: 0, per: 0, roe: 0, debt: 0, ev: 0, div: 0,
+          foreign:    '—',
+          shortScore: 3.0, midScore: 3.0,
         };
 
         return Object.assign({}, base, {
-          id: code, name: name,
-          price: price || base.price || 0,
-          chg: chg, vol: vol,
-          w52: w52 || base.w52 || 0,
-          _market: mkt,  // 시장 구분 보존 (재무 조회 시 필요)
+          id:      code,
+          name:    name,
+          price:   price > 0 ? price : (base.price || 0),
+          chg:     chg,
+          vol:     vol,
+          w52:     w52 || base.w52 || 0,
+          _market: mkt,
+          _needPrice: price === 0,  // 가격 0이면 클릭 시 inquirePrice 우선 호출
         });
       });
     }
@@ -596,19 +598,19 @@ async function fetchLiveData() {
     if (kospiRaw.length > 0) {
       var list = buildStockList(kospiRaw, KOSPI_STOCKS, 'KOSPI');
       KOSPI_STOCKS.length = 0;
-      list.forEach(function(s){ KOSPI_STOCKS.push(s); });
+      list.forEach(function(s) { KOSPI_STOCKS.push(s); });
     }
     if (kosdaqRaw.length > 0) {
       var list2 = buildStockList(kosdaqRaw, KOSDAQ_STOCKS, 'KOSDAQ');
       KOSDAQ_STOCKS.length = 0;
-      list2.forEach(function(s){ KOSDAQ_STOCKS.push(s); });
+      list2.forEach(function(s) { KOSDAQ_STOCKS.push(s); });
     }
 
-    // AI 분석 캐시 초기화
-    Object.keys(aiCache).forEach(function(k){ delete aiCache[k]; });
+    // AI 분석 캐시 초기화 (종목 바뀌었으니 다시 받아야 함)
+    Object.keys(aiCache).forEach(function(k) { delete aiCache[k]; });
 
     renderList();
-    setFetchStatus('var(--green)', '✓ 업데이트 완료 (' + new Date().toLocaleTimeString('ko-KR') + ') — 종목 클릭하면 재무지표 자동 로드');
+    setFetchStatus('var(--green)', '✓ 업데이트 완료 (' + new Date().toLocaleTimeString('ko-KR') + ') — 종목 클릭 시 재무지표 자동 로드');
   } catch(e) {
     setFetchStatus('var(--red)', '오류: ' + e.message);
   }
