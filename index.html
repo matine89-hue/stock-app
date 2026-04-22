@@ -1078,7 +1078,7 @@ function toggleExpand(id) {
   }
 }
 
-// 종목 클릭 시 재무지표 실시간 로드 — DOM 직접 업데이트 (renderList 재호출 없음)
+// 종목 클릭 시 현재가+재무지표 실시간 로드
 async function loadStockDetail(stockId) {
   var all = KOSPI_STOCKS.concat(KOSDAQ_STOCKS);
   var s = null;
@@ -1088,42 +1088,64 @@ async function loadStockDetail(stockId) {
   var detail = await fetchStockDetail(stockId, s._market || 'KOSPI');
   if (!detail) return;
 
-  // KIS inquire-price 응답 필드명 (실제 API 스펙 기준)
-  // stck_prpr=현재가, prdy_ctrt=등락률, pbr=PBR, per=PER, eps=EPS
-  // bstp_kor_isnm=업종명, frgn_ntby_qty=외인순매수량, d250_hgpr=52주고가
-  // stck_divi=주당배당금 (배당수익률은 별도 계산 필요)
-
-  if (detail.stck_prpr) s.price = parseInt(detail.stck_prpr);
-  if (detail.prdy_ctrt) s.chg   = parseFloat(detail.prdy_ctrt);
-  if (detail.pbr)       s.pbr   = parseFloat(detail.pbr);
-  if (detail.per)       s.per   = parseFloat(detail.per);
-  if (detail.eps && s.price > 0) s.roe = parseFloat((parseInt(detail.eps) / s.price * 100).toFixed(1));
-  if (detail.bstp_kor_isnm) s.sector = detail.bstp_kor_isnm;
-
-  // 외인 순매수 (주 단위 → 금액 억원)
-  var frgnQty = parseInt(detail.frgn_ntby_qty || 0);
-  if (frgnQty !== 0 && s.price > 0) {
-    var frgnAmt = Math.round(frgnQty * s.price / 100000000);
-    s.foreign = frgnAmt >= 0 ? '+' + frgnAmt + '억' : frgnAmt + '억';
-  }
-
-  // 52주 고가 대비 현재가 등락률
+  // KIS inquire-price 실제 응답 필드명
+  var curPrice = parseInt(detail.stck_prpr || 0);   // 현재가
+  var prevClose = parseInt(detail.stck_sdpr || 0);   // 전일 종가 (기준가)
+  var chg = parseFloat(detail.prdy_ctrt || 0);       // 등락률
+  var pbr = parseFloat(detail.pbr || 0);
+  var per = parseFloat(detail.per || 0);
+  var bps = parseFloat(detail.bps || 0);
+  var eps = parseFloat(detail.eps || 0);
+  // ROE = EPS/BPS*100 (실제 ROE는 별도 API 필요, 근사값)
+  var roe = (bps > 0 && eps > 0) ? parseFloat((eps / bps * 100).toFixed(1)) : (s.roe || 0);
+  var sector = detail.bstp_kor_isnm || s.sector || '기타';
   var high52 = parseInt(detail.d250_hgpr || 0);
-  if (high52 > 0 && s.price > 0) {
-    s.w52 = Math.round((s.price - high52) / high52 * 100);
+  var w52 = (high52 > 0 && curPrice > 0) ? Math.round((curPrice - high52) / high52 * 100) : (s.w52 || 0);
+  var frgnQty = parseInt(detail.frgn_ntby_qty || 0);
+  var foreign = s.foreign || '—';
+  if (curPrice > 0 && frgnQty !== 0) {
+    var amt = Math.round(frgnQty * curPrice / 100000000);
+    foreign = amt >= 0 ? '+' + amt + '억' : amt + '억';
   }
-
-  // 거래량 업데이트
   var volNum = parseInt(detail.acml_vol || 0);
-  if (volNum > 0) {
-    s.vol = volNum >= 10000 ? Math.round(volNum/10000) + '만주' : volNum.toLocaleString() + '주';
+  var vol = volNum > 0 ? (volNum >= 10000 ? Math.round(volNum/10000) + '만' : volNum.toLocaleString()) + '주' : s.vol;
+
+  // 데이터 업데이트
+  if (curPrice > 0) { s.price = curPrice; s._curPrice = curPrice; }
+  if (prevClose > 0) s._prevClose = prevClose;
+  s.chg = chg;
+  if (pbr > 0) s.pbr = pbr;
+  if (per > 0) s.per = per;
+  if (roe > 0) s.roe = roe;
+  s.sector = sector;
+  s.w52 = w52;
+  s.foreign = foreign;
+  s.vol = vol;
+
+  // 카드 DOM 직접 업데이트 (카드 닫힘 방지)
+  var card = document.getElementById('card-' + stockId);
+  if (!card) return;
+
+  // 가격 표시: 현재가(실시간) + 전일종가
+  var priceEl = card.querySelector('.price-main');
+  if (priceEl && curPrice > 0) {
+    priceEl.textContent = curPrice.toLocaleString();
+  }
+  var chgEl = card.querySelector('.price-chg');
+  if (chgEl) {
+    chgEl.textContent = (chg >= 0 ? '+' : '') + chg + '%';
+    chgEl.className = 'price-chg ' + (chg >= 0 ? 'up' : 'dn');
   }
 
-  // renderList 대신 해당 카드 DOM만 직접 업데이트 (카드 닫힘 방지)
-  // 메트릭 박스 직접 갱신
-  function setMetric(label, val, flag) {
-    var card = document.getElementById('card-' + stockId);
-    if (!card) return;
+  // 카드 서브텍스트에 전일종가 추가
+  var subEl = card.querySelector('.stock-sub');
+  if (subEl && prevClose > 0) {
+    var volTxt = vol;
+    subEl.textContent = '거래량 ' + volTxt + ' · 전일종가 ' + prevClose.toLocaleString() + '원';
+  }
+
+  // 메트릭 박스 갱신
+  function setMetric(label, val, flag, flagClass) {
     var boxes = card.querySelectorAll('.metric-box');
     for (var i = 0; i < boxes.length; i++) {
       var lbl = boxes[i].querySelector('.m-label');
@@ -1131,26 +1153,27 @@ async function loadStockDetail(stockId) {
         var v = boxes[i].querySelector('.m-val');
         var f = boxes[i].querySelector('.m-flag');
         if (v) v.textContent = val;
-        if (f && flag) f.textContent = flag;
+        if (f) { f.textContent = flag; f.className = 'm-flag ' + (flagClass || ''); }
         break;
       }
     }
   }
 
-  setMetric('PBR',  s.pbr  ? s.pbr.toFixed(2)  : '—', s.pbr < 1 ? '저평가' : s.pbr > 3 ? '고평가' : '보통');
-  setMetric('PER',  s.per  ? s.per.toFixed(1)   : 'N/A', s.per && s.per < 10 ? '저평가' : s.per && s.per > 30 ? '고평가' : '보통');
-  setMetric('ROE',  s.roe  ? s.roe.toFixed(1) + '%' : '—', '');
-  setMetric('외인순매수', s.foreign || '—', s.foreign && s.foreign.startsWith('+') ? '유입' : '유출');
-  setMetric('52주대비', s.w52 ? (s.w52 > 0 ? '+' : '') + s.w52 + '%' : '—', s.w52 <= -30 ? '낙폭과대' : s.w52 >= 30 ? '고점권' : '보통');
-
-  // 가격/등락률 직접 업데이트
-  var card2 = document.getElementById('card-' + stockId);
-  if (card2) {
-    var priceEl = card2.querySelector('.price-main');
-    var chgEl   = card2.querySelector('.price-chg');
-    if (priceEl) priceEl.textContent = s.price.toLocaleString();
-    if (chgEl)   chgEl.textContent   = (s.chg >= 0 ? '+' : '') + s.chg + '%';
-  }
+  setMetric('PBR', pbr > 0 ? pbr.toFixed(2) : '—',
+    pbr > 0 ? (pbr < 1 ? '저평가' : pbr > 3 ? '고평가' : '보통') : '—',
+    pbr > 0 ? (pbr < 1 ? 'good' : pbr > 3 ? 'bad' : 'warn') : '');
+  setMetric('PER', per > 0 ? per.toFixed(1) : 'N/A',
+    per > 0 ? (per < 10 ? '저평가' : per > 30 ? '고평가' : '보통') : '적자/N/A',
+    per > 0 ? (per < 10 ? 'good' : per > 30 ? 'bad' : 'warn') : '');
+  setMetric('ROE', roe > 0 ? roe.toFixed(1) + '%' : '—',
+    roe > 15 ? '우수' : roe > 5 ? '보통' : '부진',
+    roe > 15 ? 'good' : roe > 5 ? 'warn' : 'bad');
+  setMetric('외인순매수', foreign,
+    foreign.startsWith('+') ? '유입' : foreign === '—' ? '—' : '유출',
+    foreign.startsWith('+') ? 'good' : 'bad');
+  setMetric('52주대비', w52 ? (w52 > 0 ? '+' : '') + w52 + '%' : '—',
+    w52 <= -30 ? '낙폭과대' : w52 >= 30 ? '고점권' : '보통',
+    w52 <= -30 ? 'good' : w52 >= 30 ? 'bad' : '');
 }
 
 function switchDetailTab(e, id, idx) {
@@ -1180,42 +1203,61 @@ function openNoti() { switchMainTab(4); }
 function closeNoti(e) {}
 function toggleNoti(el) { el.classList.toggle('on'); }
 
-// ── Claude AI Analysis ────────────────────────────────────────────
-const aiCache = {};
+// ── AI Analysis (Gemini) ─────────────────────────────────────────
+var aiCache = {};
 
 async function loadAiAnalysis(stockId) {
-  const el = document.getElementById(`ai-text-${stockId}`);
-  if(!el) return;
-  if(aiCache[stockId]) { el.innerHTML = aiCache[stockId]; return; }
+  var el = document.getElementById('ai-text-' + stockId);
+  if (!el) return;
+  if (aiCache[stockId]) { el.textContent = aiCache[stockId]; return; }
 
-  const all = [...KOSPI_STOCKS, ...KOSDAQ_STOCKS];
-  const s = all.find(x=>x.id===stockId);
-  if(!s) return;
+  var all = KOSPI_STOCKS.concat(KOSDAQ_STOCKS);
+  var s = null;
+  for (var i = 0; i < all.length; i++) { if (all[i].id === stockId) { s = all[i]; break; } }
+  if (!s) return;
 
-  el.innerHTML = '<div class="ai-loading"><div class="spinner"></div> Claude AI 분석 중...</div>';
+  el.innerHTML = '<div class="ai-loading"><div class="spinner"></div> AI 분석 중...</div>';
 
-  const prompt = `당신은 한국 주식 전문 애널리스트입니다. 다음 종목 데이터를 바탕으로 단기(1~5일) 투자 판단 근거를 3~4문장으로 간결하게 한국어로 설명하세요. 수치 근거를 포함하고 리스크도 언급하세요. 마크다운 사용 금지.
+  var newsText = '';
+  if (s.news && s.news.length > 0) {
+    for (var j = 0; j < s.news.length; j++) { newsText += s.news[j].t + ' | '; }
+  } else {
+    newsText = '뉴스 없음';
+  }
 
-종목: ${s.name}(${s.id}) / 섹터: ${s.sector}
-PBR: ${s.pbr} / PER: ${s.per||'N/A'} / ROE: ${s.roe}% / 부채비율: ${s.debt}%
-52주대비: ${s.w52}% / 배당수익률: ${s.div}% / 외인순매수: ${s.foreign}
-당일등락: ${s.chg}% / 단기추천: ${s.shortScore}점 / 중기추천: ${s.midScore}점
-주요뉴스: ${s.news.map(n=>n.t).join(' | ')}`;
+  var prompt = '당신은 한국 주식 전문 애널리스트입니다. 다음 종목 데이터를 바탕으로 단기(1~5일) 투자 판단 근거를 3~4문장으로 간결하게 한국어로 설명하세요. 수치 근거를 포함하고 리스크도 언급하세요. 마크다운 사용 금지.
+
+'
+    + '종목: ' + s.name + '(' + s.id + ') / 섹터: ' + (s.sector || '기타') + '
+'
+    + 'PBR: ' + (s.pbr || 0) + ' / PER: ' + (s.per || 'N/A') + ' / ROE: ' + (s.roe || 0) + '% / 부채비율: ' + (s.debt || 0) + '%
+'
+    + '52주대비: ' + (s.w52 || 0) + '% / 배당수익률: ' + (s.div || 0) + '% / 외인순매수: ' + (s.foreign || '—') + '
+'
+    + '당일등락: ' + (s.chg || 0) + '% / 단기추천: ' + (s.shortScore || 3) + '점 / 중기추천: ' + (s.midScore || 3) + '점
+'
+    + '주요뉴스: ' + newsText;
 
   try {
     var res = await fetch(PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'aiAnalysis', prompt: prompt,
-        token: '', appkey: '', appsecret: '' })
+      body: JSON.stringify({ action: 'aiAnalysis', prompt: prompt })
     });
     var data = await res.json();
-    var textBlock = data.content && data.content.find(function(c){ return c.type === 'text'; });
-    var text = (textBlock && textBlock.text) || data.error || '분석 결과를 불러올 수 없습니다.';
+    // Gemini 응답: data.candidates[0].content.parts[0].text
+    var text = '';
+    if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
+      text = data.candidates[0].content.parts[0].text || '';
+    } else if (data.error) {
+      text = '오류: ' + (typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
+    } else {
+      text = '분석 결과를 불러올 수 없습니다.';
+    }
     aiCache[stockId] = text;
     var el2 = document.getElementById('ai-text-' + stockId);
     if (el2) el2.textContent = text;
-  } catch(err) {
+  } catch (err) {
     var el2 = document.getElementById('ai-text-' + stockId);
     if (el2) el2.textContent = '분석 오류: ' + err.message;
   }
