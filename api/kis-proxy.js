@@ -29,7 +29,7 @@ export default async function handler(req, res) {
       };
     }
 
-    // ✅ 1. 토큰 발급 (정상)
+    // ✅ 1. 토큰 발급
     if (action === 'getToken') {
       const r = await fetch(KIS + '/oauth2/tokenP', {
         method: 'POST',
@@ -37,24 +37,23 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           grant_type: 'client_credentials',
           appkey,
-          appsecret
+          appsecret,
         }),
       });
       return res.status(r.status).json(await r.json());
     }
 
-    // ✅ 2. 거래량 순위 (핵심 수정)
+    // ✅ 2. 거래량 + 점수까지 한번에 (핵심)
     if (action === 'volumeRank') {
+
       const isKospi = market === 'KOSPI';
 
       const params = new URLSearchParams({
-        // 🔥 시장코드 수정
-        FID_COND_MRKT_DIV_CODE: isKospi ? 'J' : 'Q',
-
+        FID_COND_MRKT_DIV_CODE: 'J',
         FID_COND_SCR_DIV_CODE: '20171',
 
-        // 🔥 핵심 수정 (0000)
-        FID_INPUT_ISCD: '0000',
+        // 👉 네 환경 기준 유지
+        FID_INPUT_ISCD: isKospi ? '0001' : '1001',
 
         FID_DIV_CLS_CODE: '0',
         FID_BLNG_CLS_CODE: '0',
@@ -70,16 +69,88 @@ export default async function handler(req, res) {
         KIS + '/uapi/domestic-stock/v1/quotations/volume-rank?' + params.toString(),
         {
           method: 'GET',
-
-          // 🔥 TR_ID 수정
           headers: kisHeader('FHPST01710000'),
+        }
+      );
+
+      const data = await r.json();
+      const list = data.output || [];
+
+      // 👉 점수 계산 함수
+      function calcScore(price, fundamental) {
+        let score = 0;
+
+        const per = parseFloat(fundamental?.output?.per || 0);
+        const pbr = parseFloat(fundamental?.output?.pbr || 0);
+        const change = parseFloat(price?.output?.prdy_ctrt || 0);
+
+        if (per > 0 && per < 10) score += 2;
+        if (pbr > 0 && pbr < 1) score += 2;
+        if (change < -3) score += 1;
+
+        return score;
+      }
+
+      const result = [];
+
+      for (const stock of list.slice(0, 10)) {
+
+        const code = stock.stck_shrn_iscd;
+
+        // 👉 현재가
+        const priceRes = await fetch(
+          KIS + '/uapi/domestic-stock/v1/quotations/inquire-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=' + code,
+          {
+            method: 'GET',
+            headers: kisHeader('FHKST01010100'),
+          }
+        );
+
+        const priceData = await priceRes.json();
+
+        // 👉 재무지표
+        const fundRes = await fetch(
+          KIS + '/uapi/domestic-stock/v1/finance/inquire-fundamental?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=' + code,
+          {
+            method: 'GET',
+            headers: kisHeader('FHKST01010400'),
+          }
+        );
+
+        const fundData = await fundRes.json();
+
+        const score = calcScore(priceData, fundData);
+
+        result.push({
+          ...stock,
+          price: priceData?.output || {},
+          fundamental: fundData?.output || {},
+          score
+        });
+      }
+
+      return res.json(result);
+    }
+
+    // ✅ 3. 개별 재무 조회 (UI 유지용)
+    if (action === 'fundamental') {
+      const params = new URLSearchParams({
+        FID_COND_MRKT_DIV_CODE: 'J',
+        FID_INPUT_ISCD: stockCode,
+      });
+
+      const r = await fetch(
+        KIS + '/uapi/domestic-stock/v1/finance/inquire-fundamental?' + params.toString(),
+        {
+          method: 'GET',
+          headers: kisHeader('FHKST01010400'),
         }
       );
 
       return res.status(r.status).json(await r.json());
     }
 
-    // ✅ 3. 현재가 조회 (정상)
+    // ✅ 4. 현재가 조회
     if (action === 'inquirePrice') {
       const params = new URLSearchParams({
         FID_COND_MRKT_DIV_CODE: 'J',
@@ -97,14 +168,12 @@ export default async function handler(req, res) {
       return res.status(r.status).json(await r.json());
     }
 
-    // ✅ 4. AI 분석 (그대로 유지)
+    // ✅ 5. AI 분석
     if (action === 'aiAnalysis') {
       const geminiKey = process.env.GEMINI_API_KEY || '';
 
       if (!geminiKey) {
-        return res.status(500).json({
-          error: 'GEMINI_API_KEY 환경변수 없음'
-        });
+        return res.status(500).json({ error: 'GEMINI_API_KEY 없음' });
       }
 
       const r = await fetch(
@@ -114,10 +183,7 @@ export default async function handler(req, res) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              maxOutputTokens: 500,
-              temperature: 0.7
-            },
+            generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
           }),
         }
       );
