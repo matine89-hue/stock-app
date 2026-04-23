@@ -7,15 +7,13 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
-    const {
-      action = '',
-      appkey = '',
-      appsecret = '',
-      token = '',
-      market = 'KOSPI',
-      stockCode = '',
-      prompt = ''
-    } = req.body || {};
+    const body = req.body || {};
+    const action    = body.action    || '';
+    const appkey    = body.appkey    || '';
+    const appsecret = body.appsecret || '';
+    const token     = body.token     || '';
+    const stockCode = body.stockCode || '';
+    const prompt    = body.prompt    || '';
 
     const KIS = 'https://openapi.koreainvestment.com:9443';
 
@@ -30,7 +28,7 @@ export default async function handler(req, res) {
       };
     }
 
-    // ✅ 1. 토큰 발급
+    // ── 1. 토큰 발급
     if (action === 'getToken') {
       const r = await fetch(KIS + '/oauth2/tokenP', {
         method: 'POST',
@@ -44,30 +42,39 @@ export default async function handler(req, res) {
       return res.status(r.status).json(await r.json());
     }
 
-    // ✅ 2. 거래량 순위 (완전 수정 핵심)
+    // ── 2. 거래량 순위 (🔥 핵심 수정)
     if (action === 'volumeRank') {
 
-      const marketCode = market === 'KOSPI' ? 'J' : 'Q';
+      async function fetchMarket(code) {
+        const params = new URLSearchParams({
+          FID_COND_MRKT_DIV_CODE: code,
+          FID_COND_SCR_DIV_CODE: '20171',
+          FID_INPUT_ISCD: '0000',
+        });
 
-      const params = new URLSearchParams({
-        FID_COND_MRKT_DIV_CODE: marketCode,
-        FID_COND_SCR_DIV_CODE: '20171',
-        FID_INPUT_ISCD: '0000',   // 🔴 핵심 (전체 조회)
+        const r = await fetch(
+          KIS + '/uapi/domestic-stock/v1/quotations/volume-rank?' + params.toString(),
+          { method: 'GET', headers: kisHeader('FHPST01710000') }
+        );
+
+        const json = await r.json();
+        return json.output || [];
+      }
+
+      const [kospi, kosdaq] = await Promise.all([
+        fetchMarket('J'),
+        fetchMarket('Q')
+      ]);
+
+      return res.status(200).json({
+        output: [...kospi, ...kosdaq]
       });
-
-      const r = await fetch(
-        KIS + '/uapi/domestic-stock/v1/quotations/volume-rank?' + params.toString(),
-        { method: 'GET', headers: kisHeader('FHPST01710000') }
-      );
-
-      return res.status(r.status).json(await r.json());
     }
 
-    // ✅ 3. 현재가 조회
+    // ── 3. 현재가 조회
     if (action === 'inquirePrice') {
-
       const params = new URLSearchParams({
-        FID_COND_MRKT_DIV_CODE: 'J',  // KIS는 여기 J로 통합
+        FID_COND_MRKT_DIV_CODE: 'J',
         FID_INPUT_ISCD: stockCode,
       });
 
@@ -79,15 +86,12 @@ export default async function handler(req, res) {
       return res.status(r.status).json(await r.json());
     }
 
-    // ✅ 4. AI 분석
+    // ── 4. AI 분석
     if (action === 'aiAnalysis') {
-
       const geminiKey = process.env.GEMINI_API_KEY || '';
 
       if (!geminiKey) {
-        return res.status(500).json({
-          error: 'GEMINI_API_KEY 없음 (Vercel 환경변수 설정 필요)'
-        });
+        return res.status(500).json({ error: 'GEMINI_API_KEY 없음' });
       }
 
       const r = await fetch(
@@ -97,10 +101,7 @@ export default async function handler(req, res) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              maxOutputTokens: 500,
-              temperature: 0.7
-            },
+            generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
           }),
         }
       );
