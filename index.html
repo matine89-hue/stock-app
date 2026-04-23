@@ -907,7 +907,14 @@ function loadStockDetail(stockId) {
     var foreign   = s.foreign;
     if (curPrice > 0 && frgnQty !== 0) {
       var amt = Math.round(frgnQty * curPrice / 100000000);
-      foreign = amt >= 0 ? '+' + amt + '억' : amt + '억';
+      if (Math.abs(amt) < 1 && frgnQty !== 0) {
+        // 억원 미만이면 만원 단위로
+        foreign = frgnQty > 0 ? '+소량' : '-소량';
+      } else {
+        foreign = amt >= 0 ? '+' + amt + '억' : amt + '억';
+      }
+    } else if (frgnQty === 0) {
+      foreign = '0';
     }
     var volNum = parseInt(detail.acml_vol || 0);
 
@@ -921,6 +928,41 @@ function loadStockDetail(stockId) {
     s.foreign = foreign;
     if (detail.bstp_kor_isnm) s.sector = detail.bstp_kor_isnm;
     if (volNum > 0) s.vol = (volNum >= 10000 ? Math.round(volNum/10000)+'만' : volNum.toLocaleString()) + '주';
+
+    // 부채비율: lstn_stcn(상장주식수) 없음 → KIS 응답 lblt_rate 필드 시도
+    var debt = parseFloat(detail.lblt_rate || 0);
+    if (debt > 0) s.debt = debt;
+
+    // 배당수익률: hts_avls(시총) 기반 근사 없음 → stck_divi(주당배당금)/현재가*100
+    var divi = parseFloat(detail.stck_divi || 0);
+    if (divi > 0 && curPrice > 0) s.div = parseFloat((divi / curPrice * 100).toFixed(2));
+
+    // 점수 자동계산 (실데이터 기반)
+    var score = 3.0;
+    // PBR 저평가 가산
+    if (pbr > 0 && pbr < 0.5) score += 1.0;
+    else if (pbr > 0 && pbr < 1.0) score += 0.5;
+    else if (pbr > 3.0) score -= 0.5;
+    // 52주 낙폭과대 가산
+    if (w52 <= -50) score += 1.0;
+    else if (w52 <= -30) score += 0.5;
+    else if (w52 >= 30) score -= 0.5;
+    // 당일 등락률
+    if (chg >= 5) score += 0.5;
+    else if (chg >= 2) score += 0.3;
+    else if (chg <= -5) score -= 0.5;
+    // PER
+    if (per > 0 && per < 10) score += 0.3;
+    else if (per > 30) score -= 0.3;
+    // ROE
+    if (roe > 15) score += 0.2;
+    // 외인 순매수
+    if (frgnQty > 0) score += 0.3;
+    else if (frgnQty < 0) score -= 0.3;
+    // 범위 제한
+    score = Math.max(0, Math.min(5, parseFloat(score.toFixed(1))));
+    s.shortScore = score;
+    s.midScore   = parseFloat(Math.max(0, Math.min(5, score - 0.5 + (w52 <= -30 ? 0.5 : 0))).toFixed(1));
 
     // 카드 DOM 직접 업데이트
     var card = document.getElementById('card-' + stockId);
@@ -954,8 +996,30 @@ function loadStockDetail(stockId) {
     setMetric('PBR', pbr>0?pbr.toFixed(2):'—', pbr>0?(pbr<1?'저평가':pbr>3?'고평가':'보통'):'', pbr>0?(pbr<1?'good':pbr>3?'bad':'warn'):'');
     setMetric('PER', per>0?per.toFixed(1):'N/A', per>0?(per<10?'저평가':per>30?'고평가':'보통'):'N/A', per>0?(per<10?'good':per>30?'bad':'warn'):'');
     setMetric('ROE', roe>0?roe.toFixed(1)+'%':'—', roe>15?'우수':roe>5?'보통':'부진', roe>15?'good':roe>5?'warn':'bad');
-    setMetric('외인순매수', foreign, foreign.indexOf('+')===0?'유입':'유출', foreign.indexOf('+')===0?'good':'bad');
+    setMetric('외인순매수', foreign, foreign==='0'?'중립':foreign.indexOf('+')===0?'유입':'유출', foreign.indexOf('+')===0?'good':foreign==='-'||foreign==='0'?'':'bad');
     setMetric('52주대비', w52?(w52>0?'+':'')+w52+'%':'—', w52<=-30?'낙폭과대':w52>=30?'고점권':'보통', w52<=-30?'good':w52>=30?'bad':'');
+    if (s.debt > 0) setMetric('부채비율', s.debt.toFixed(0)+'%', s.debt<50?'양호':s.debt<150?'주의':'위험', s.debt<50?'good':s.debt<150?'warn':'bad');
+    if (s.div > 0) setMetric('배당수익률', s.div.toFixed(1)+'%', s.div>=3?'고배당':s.div>=1?'보통':'낮음', s.div>=3?'good':'warn');
+    // 점수 도트 업데이트
+    var card = document.getElementById('card-' + stockId);
+    if (card) {
+      var scoreRows = card.querySelectorAll('.score-row');
+      if (scoreRows.length > 0) {
+        var dotHtml = '';
+        var filled = Math.round(s.shortScore);
+        for (var di=1;di<=5;di++) dotHtml += '<div class="sdot '+(di<=filled?'fill':'empty')+'"></div>';
+        dotHtml += '<span class="score-num">'+s.shortScore.toFixed(1)+'</span>';
+        scoreRows[0].innerHTML = dotHtml;
+      }
+      // 추천 배지 업데이트
+      var badge = card.querySelector('.score-badge');
+      if (badge) {
+        if (s.shortScore>=4.5) { badge.className='score-badge sb-5'; badge.textContent='강력추천'; }
+        else if (s.shortScore>=4.0) { badge.className='score-badge sb-4'; badge.textContent='추천'; }
+        else if (s.shortScore>=3.0) { badge.className='score-badge sb-3'; badge.textContent='중립+'; }
+        else { badge.className='score-badge sb-low'; badge.textContent='관망'; }
+      }
+    }
   });
 }
 
