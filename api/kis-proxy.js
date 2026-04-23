@@ -1,98 +1,99 @@
-// Vercel Serverless Function — KIS API 중계 서버
-// Vercel은 export default function 형식 사용 (Netlify의 exports.handler와 다름)
-
 export default async function handler(req, res) {
-  // CORS 헤더 설정
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-
-  // preflight 요청 처리
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
   try {
-    const { action, appkey, appsecret, token, params } = req.body;
-    const KIS_BASE = 'https://openapi.koreainvestment.com:9443';
+    const body = req.body || {};
+    const action    = body.action    || '';
+    const appkey    = body.appkey    || '';
+    const appsecret = body.appsecret || '';
+    const token     = body.token     || '';
+    const market    = body.market    || 'KOSPI';
+    const stockCode = body.stockCode || '';
+    const prompt    = body.prompt    || '';
 
-    // ── 토큰 발급 ──────────────────────────────────────────────
+    const KIS = 'https://openapi.koreainvestment.com:9443';
+
+    function kisHeader(trId) {
+      return {
+        'Content-Type': 'application/json; charset=utf-8',
+        'authorization': 'Bearer ' + token,
+        'appkey': appkey,
+        'appsecret': appsecret,
+        'tr_id': trId,
+        'custtype': 'P',
+      };
+    }
+
+    // ── 1. 토큰 발급
     if (action === 'getToken') {
-      const kisRes = await fetch(KIS_BASE + '/oauth2/tokenP', {
+      const r = await fetch(KIS + '/oauth2/tokenP', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grant_type: 'client_credentials',
-          appkey,
-          appsecret,
-        }),
+        body: JSON.stringify({ grant_type: 'client_credentials', appkey, appsecret }),
       });
-      const data = await kisRes.json();
-      return res.status(kisRes.status).json(data);
+      return res.status(r.status).json(await r.json());
     }
 
-    // ── 거래량 상위 종목 조회 ───────────────────────────────────
+    // ── 2. 거래량 순위 조회
+    // 코스피: FID_COND_MRKT_DIV_CODE=J + FID_INPUT_ISCD=0000
+    // 코스닥: FID_COND_MRKT_DIV_CODE=Q + FID_INPUT_ISCD=0000
     if (action === 'volumeRank') {
-      const market = params?.market || 'KOSPI';
-      const qs = new URLSearchParams({
-        FID_COND_MRKT_DIV_CODE: market === 'KOSPI' ? 'J' : 'Q',
-        FID_COND_SCR_DIV_CODE: '20171',
-        FID_INPUT_ISCD: market === 'KOSPI' ? '0001' : '1001',
-        FID_DIV_CLS_CODE: '0',
-        FID_BLNG_CLS_CODE: '0',
-        FID_TRGT_CLS_CODE: '111111111',
-        FID_TRGT_EXLS_CLS_CODE: '000000',
-        FID_INPUT_PRICE_1: '0',
-        FID_INPUT_PRICE_2: '0',
-        FID_VOL_CNT: '0',
-        FID_INPUT_DATE_1: '0',
-      }).toString();
-
-      const kisRes = await fetch(
-        KIS_BASE + '/uapi/domestic-stock/v1/quotations/volume-rank?' + qs,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-            authorization: 'Bearer ' + token,
-            appkey,
-            appsecret,
-            tr_id: 'FHPST01710000',
-            custtype: 'P',
-          },
-        }
+      const isKospi = market === 'KOSPI';
+      const params = new URLSearchParams({
+        FID_COND_MRKT_DIV_CODE:  'J',
+        FID_COND_SCR_DIV_CODE:   '20171',
+        FID_INPUT_ISCD:          isKospi ? '0001' : '1001',
+        FID_DIV_CLS_CODE:        '0',
+        FID_BLNG_CLS_CODE:       '0',
+        FID_TRGT_CLS_CODE:       '111111111',
+        FID_TRGT_EXLS_CLS_CODE:  '000000',
+        FID_INPUT_PRICE_1:       '0',
+        FID_INPUT_PRICE_2:       '0',
+        FID_VOL_CNT:             '0',
+        FID_INPUT_DATE_1:        '0',
+      });
+      const r = await fetch(
+        KIS + '/uapi/domestic-stock/v1/quotations/volume-rank?' + params.toString(),
+        { method: 'GET', headers: kisHeader('FHPST01710000') }
       );
-      const data = await kisRes.json();
-      return res.status(kisRes.status).json(data);
+      return res.status(r.status).json(await r.json());
     }
 
-    // ── 주식 현재가 조회 ────────────────────────────────────────
+    // ── 3. 현재가 + 재무지표 조회 (코스피·코스닥 모두 J)
     if (action === 'inquirePrice') {
-      const qs = new URLSearchParams({
+      const params = new URLSearchParams({
         FID_COND_MRKT_DIV_CODE: 'J',
-        FID_INPUT_ISCD: params?.stockCode,
-      }).toString();
+        FID_INPUT_ISCD: stockCode,
+      });
+      const r = await fetch(
+        KIS + '/uapi/domestic-stock/v1/quotations/inquire-price?' + params.toString(),
+        { method: 'GET', headers: kisHeader('FHKST01010100') }
+      );
+      return res.status(r.status).json(await r.json());
+    }
 
-      const kisRes = await fetch(
-        KIS_BASE + '/uapi/domestic-stock/v1/quotations/inquire-price?' + qs,
+    // ── 4. Gemini AI 분석 (무료)
+    if (action === 'aiAnalysis') {
+      const geminiKey = process.env.GEMINI_API_KEY || '';
+      if (!geminiKey) {
+        return res.status(500).json({ error: 'GEMINI_API_KEY 환경변수가 Vercel에 설정되지 않았습니다. Vercel > Settings > Environment Variables 에 추가하세요.' });
+      }
+      const r = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=' + geminiKey,
         {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-            authorization: 'Bearer ' + token,
-            appkey,
-            appsecret,
-            tr_id: 'FHKST01010100',
-            custtype: 'P',
-          },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
+          }),
         }
       );
-      const data = await kisRes.json();
-      return res.status(kisRes.status).json(data);
+      return res.status(r.status).json(await r.json());
     }
 
     return res.status(400).json({ error: 'Unknown action: ' + action });
