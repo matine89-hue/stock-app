@@ -8,12 +8,7 @@ export default async function handler(req, res) {
 
   try {
     const body = req.body || {};
-    const action    = body.action    || '';
-    const appkey    = body.appkey    || '';
-    const appsecret = body.appsecret || '';
-    const token     = body.token     || '';
-    const stockCode = body.stockCode || '';
-    const prompt    = body.prompt    || '';
+    const { action, appkey, appsecret, token, stockCode } = body;
 
     const KIS = 'https://openapi.koreainvestment.com:9443';
 
@@ -28,21 +23,7 @@ export default async function handler(req, res) {
       };
     }
 
-    // ── 1. 토큰 발급
-    if (action === 'getToken') {
-      const r = await fetch(KIS + '/oauth2/tokenP', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grant_type: 'client_credentials',
-          appkey,
-          appsecret
-        }),
-      });
-      return res.status(r.status).json(await r.json());
-    }
-
-    // ── 2. 거래량 순위 (🔥 핵심 수정)
+    // ✅ 거래량 순위
     if (action === 'volumeRank') {
 
       async function fetchMarket(code) {
@@ -58,58 +39,22 @@ export default async function handler(req, res) {
         );
 
         const json = await r.json();
-        return json.output || [];
+
+        // 🔥 핵심: output2 fallback
+        return json.output || json.output2 || [];
       }
 
-      const [kospi, kosdaq] = await Promise.all([
-        fetchMarket('J'),
-        fetchMarket('Q')
-      ]);
+      const kospi = await fetchMarket('J');
+      const kosdaq = await fetchMarket('Q');
 
-      return res.status(200).json({
-        output: [...kospi, ...kosdaq]
-      });
+      // 🔥 완전히 다른 배열로 병합 (참조 분리)
+      const merged = [...kospi.map(x => ({...x, market:'KOSPI'})),
+                      ...kosdaq.map(x => ({...x, market:'KOSDAQ'}))];
+
+      return res.status(200).json({ output: merged });
     }
 
-    // ── 3. 현재가 조회
-    if (action === 'inquirePrice') {
-      const params = new URLSearchParams({
-        FID_COND_MRKT_DIV_CODE: 'J',
-        FID_INPUT_ISCD: stockCode,
-      });
-
-      const r = await fetch(
-        KIS + '/uapi/domestic-stock/v1/quotations/inquire-price?' + params.toString(),
-        { method: 'GET', headers: kisHeader('FHKST01010100') }
-      );
-
-      return res.status(r.status).json(await r.json());
-    }
-
-    // ── 4. AI 분석
-    if (action === 'aiAnalysis') {
-      const geminiKey = process.env.GEMINI_API_KEY || '';
-
-      if (!geminiKey) {
-        return res.status(500).json({ error: 'GEMINI_API_KEY 없음' });
-      }
-
-      const r = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + geminiKey,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
-          }),
-        }
-      );
-
-      return res.status(r.status).json(await r.json());
-    }
-
-    return res.status(400).json({ error: 'Unknown action: ' + action });
+    return res.status(400).json({ error: 'Unknown action' });
 
   } catch (err) {
     return res.status(500).json({ error: err.message });
