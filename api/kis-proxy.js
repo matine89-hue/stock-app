@@ -11,19 +11,22 @@ export default async function handler(req, res) {
         const APP_SECRET = process.env.KIS_APPSECRET;
 
         // 1. 현재가 및 재무지표 조회 액션
-        if (action === 'inquirePrice') {
-            const r = await fetch(`${KIS}/uapi/domestic-stock/v1/quotations/inquire-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=${stockCode}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'authorization': `Bearer ${token}`,
-                    'appkey': APP_KEY,
-                    'appsecret': APP_SECRET,
-                    'tr_id': 'FHKST01010100' // 현재가 및 재무비율 포함 tr_id
-                }
-            });
-            return res.status(200).json(await r.json());
-        }
+        // kis-proxy.js 내 
+if (action === 'inquirePrice') {
+  // 프론트에서 넘어온 appkey, appsecret, token을 사용하도록 유지
+  const r = await fetch(KIS + '/uapi/domestic-stock/v1/quotations/inquire-price?FID_COND_MRKT_DIV_CODE=J&FID_INPUT_ISCD=' + stockCode, {
+    method: 'GET',
+    headers: {
+      'authorization': 'Bearer ' + token,
+      'appkey': appkey,
+      'appsecret': appsecret,
+      'tr_id': 'FHKST01010100'
+    }
+  });
+  const resData = await r.json();
+  return res.status(200).json(resData);
+}
+
 
         // 2. AI 분석 액션 (수정된 부분)
         if (action === 'aiAnalysis') {
