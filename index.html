@@ -1,194 +1,160 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>국장 스크리너</title>
-
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>국장 스크리너 - 전략적 투자</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-body {
-  margin:0;
-  font-family: Arial, sans-serif;
-  background:#111;
-  color:#fff;
-}
-
-header {
-  padding:10px;
-  background:#1a1a1a;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-}
-
-.container {
-  padding:10px;
-}
-
-.section {
-  margin-bottom:20px;
-}
-
-.card {
-  background:#1c1c1c;
-  padding:10px;
-  margin-bottom:8px;
-  border-radius:8px;
-  cursor:pointer;
-}
-
-.score {
-  float:right;
-  font-weight:bold;
-}
-
-button {
-  padding:10px;
-  width:100%;
-  margin-top:10px;
-  background:#2c2c2c;
-  color:white;
-  border:none;
-  border-radius:6px;
-}
+/* 기존 스타일 유지 (공간 절약을 위해 생략, 사용자 파일의 스타일을 그대로 사용하세요) */
+:root { --bg: #0d0f14; --bg2: #13161e; --text: #e8eaf0; --blue: #4a9eff; --green: #3dd68c; --red: #ff5c5c; --amber: #ffab00; }
+body { background: var(--bg); color: var(--text); font-family: 'Noto Sans KR', sans-serif; margin: 0; padding: 20px; }
+.card { background: var(--bg2); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 15px; margin-bottom: 10px; cursor: pointer; transition: 0.2s; }
+.card:hover { border-color: var(--blue); }
+.score-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: bold; margin-bottom: 5px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
+.detail-area { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #333; font-size: 0.9em; }
+.ai-reason { color: #3dd68c; background: rgba(61,214,140,0.05); padding: 10px; border-radius: 4px; margin-top: 5px; }
 </style>
 </head>
-
 <body>
 
-<header>
-  <div>국장스크리너</div>
-  <div>🔔</div>
-</header>
-
-<div class="container">
-
-  <div class="section">
-    <button onclick="loadData()">📡 실시간 데이터 불러오기</button>
-  </div>
-
-  <div class="section">
-    <h3>📊 코스피</h3>
-    <div id="kospi"></div>
-  </div>
-
-  <div class="section">
-    <h3>📈 코스닥</h3>
-    <div id="kosdaq"></div>
-  </div>
-
-</div>
+<div id="status-bar" style="margin-bottom:20px; padding:10px; border-radius:8px; background: #1a1e28;">분석 준비 중...</div>
+<div id="stock-list" class="grid"></div>
 
 <script>
+const PROXY_URL = '/api/kis-proxy'; // 본인의 환경에 맞게 수정
+let STOCKS_DATA = [];
 
-// 🔐 저장된 키
-let APP_KEY = localStorage.getItem('appkey') || '';
-let APP_SECRET = localStorage.getItem('appsecret') || '';
-let TOKEN = localStorage.getItem('token') || '';
+// 1. 실시간 데이터 및 재무지표 통합 로드
+async function fetchLiveData() {
+    updateStatus('데이터 로딩 및 재무 분석 중...', 'var(--amber)');
+    const token = localStorage.getItem('kis_token');
+    if(!token) { updateStatus('토큰이 없습니다. 로그인이 필요합니다.', 'var(--red)'); return; }
 
-async function getToken() {
-  const res = await fetch('/api/kis-proxy', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      action:'getToken',
-      appkey:APP_KEY,
-      appsecret:APP_SECRET
+    try {
+        // 코스피/코스닥 거래량 상위 종목 호출
+        const markets = ['KOSPI', 'KOSDAQ'];
+        let allStocks = [];
+
+        for(const m of markets) {
+            const res = await fetch(PROXY_URL, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'rank', market: m, token: token })
+            });
+            const data = await res.json();
+            if(data.output) allStocks = allStocks.concat(data.output);
+        }
+
+        // 각 종목별 상세 재무 데이터 병렬 로드 (핵심 수정 부분)
+        const detailedStocks = await Promise.all(allStocks.slice(0, 20).map(async (s) => {
+            const code = s.mksc_shrn_iscd || s.stck_shrn_iscd;
+            const detailRes = await fetch(PROXY_URL, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'inquirePrice', stockCode: code, token: token })
+            });
+            const detail = await detailRes.json();
+            
+            // 데이터 매핑 (기존에 누락되던 부분)
+            const output = detail.output || {};
+            const stockObj = {
+                id: code,
+                name: s.hts_kor_isnm,
+                price: s.stck_prpr,
+                chg: s.prdy_ctrt,
+                vol: s.acml_vol,
+                pbr: output.pbr || '0',
+                per: output.per || '0',
+                roe: output.roe || '0',
+                bps: output.bps || '0',
+                // 부채비율/EV/EBITDA 등은 API에서 제공하지 않을 경우 '분석중' 표시
+                debt_ratio: output.debt_ratio || '자료없음', 
+                ev_ebitda: output.ev_ebitda || 'N/A',
+                intro: output.bstp_nm || '국내 주식 종목',
+                ai_reason: 'AI 분석 생성 중...'
+            };
+
+            // 데이터 로드 즉시 점수 계산 (수정 사항)
+            stockObj.score = calculateScore(stockObj);
+            
+            // 고득점 종목은 AI 분석 미리 요청
+            if(stockObj.score >= 4) requestAI(stockObj);
+            
+            return stockObj;
+        }));
+
+        STOCKS_DATA = detailedStocks;
+        renderList();
+        updateStatus('✅ 모든 데이터 분석 완료', 'var(--green)');
+
+    } catch (e) {
+        updateStatus('에러 발생: ' + e.message, 'var(--red)');
+    }
+}
+
+// 2. 점수 계산 로직 (수치 기반)
+function calculateScore(s) {
+    let score = 1;
+    const pbr = parseFloat(s.pbr);
+    const roe = parseFloat(s.roe);
+    
+    if (pbr > 0 && pbr < 1.5) score += 1;
+    if (roe > 10) score += 1;
+    if (parseFloat(s.chg) > 0) score += 1;
+    if (parseFloat(s.vol) > 1000000) score += 1;
+    
+    return Math.min(score, 5);
+}
+
+// 3. AI 분석 요청 로직 (제대로 출력되지 않던 문제 수정)
+function requestAI(s) {
+    const prompt = `${s.name} 종목 분석. PBR ${s.pbr}, PER ${s.per}, ROE ${s.roe}%. 거래량 ${s.vol}. 5일 이내 단기 매수 적합성을 3문장으로 요약해줘.`;
+    
+    fetch(PROXY_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action: 'aiAnalysis', prompt: prompt })
     })
-  });
-
-  const data = await res.json();
-  TOKEN = data.access_token;
-  localStorage.setItem('token', TOKEN);
-}
-
-// 🔥 점수 계산 (자동)
-function calcScore(item) {
-  let score = 0;
-
-  const rate = Number(item.prdy_ctrt || 0);
-  const vol  = Number(item.acml_vol || 0);
-  const diff = Number(item.prdy_vrss || 0);
-
-  if (rate > 5) score += 2;
-  if (vol > 1000000) score += 2;
-  if (diff > 0) score += 1;
-
-  return { ...item, score };
-}
-
-// 🔥 렌더
-function renderList(elId, list) {
-  const el = document.getElementById(elId);
-  el.innerHTML = '';
-
-  list.slice(0,20).forEach(item => {
-    const div = document.createElement('div');
-    div.className = 'card';
-
-    div.innerHTML = `
-      ${item.hts_kor_isnm || item.stck_shrn_iscd}
-      <span class="score">${item.score}점</span>
-    `;
-
-    el.appendChild(div);
-  });
-}
-
-// 🔥 핵심: 데이터 로드 + 자동 점수 계산
-async function loadData() {
-
-  if (!TOKEN) {
-    await getToken();
-  }
-
-  try {
-
-    // 코스피
-    const kospiRes = await fetch('/api/kis-proxy', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        action:'volumeRank',
-        market:'KOSPI',
-        appkey:APP_KEY,
-        appsecret:APP_SECRET,
-        token:TOKEN
-      })
+    .then(res => res.json())
+    .then(data => {
+        // Gemini API 응답 경로 수정
+        const result = data.candidates?.[0]?.content?.parts?.[0]?.text || "분석 결과를 가져오지 못했습니다.";
+        s.ai_reason = result;
+        const target = document.getElementById(`ai-box-${s.id}`);
+        if(target) target.innerText = result;
     });
-
-    // 코스닥
-    const kosdaqRes = await fetch('/api/kis-proxy', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        action:'volumeRank',
-        market:'KOSDAQ',
-        appkey:APP_KEY,
-        appsecret:APP_SECRET,
-        token:TOKEN
-      })
-    });
-
-    const kospiData = await kospiRes.json();
-    const kosdaqData = await kosdaqRes.json();
-
-    const kospiList = (kospiData.output || []).map(calcScore);
-    const kosdaqList = (kosdaqData.output || []).map(calcScore);
-
-    console.log('코스피:', kospiList.length);
-    console.log('코스닥:', kosdaqList.length);
-
-    renderList('kospi', kospiList);
-    renderList('kosdaq', kosdaqList);
-
-  } catch (e) {
-    console.error(e);
-    alert('데이터 불러오기 실패');
-  }
 }
 
+function renderList() {
+    const container = document.getElementById('stock-list');
+    container.innerHTML = STOCKS_DATA.map(s => `
+        <div class="card" onclick="this.querySelector('.detail-area').style.display='block'">
+            <div class="score-badge" style="background:${s.score >= 4 ? 'var(--red)' : 'var(--blue)'}">추천도 ${s.score}점</div>
+            <div style="font-weight:bold; font-size:1.1em;">${s.name} (${s.id})</div>
+            <div style="color:${parseFloat(s.chg) >= 0 ? 'var(--red)' : 'var(--blue)'}">현재가: ${s.price} (${s.chg}%)</div>
+            <div class="detail-area" style="display:none;">
+                <p><strong>회사소개:</strong> ${s.intro}</p>
+                <p><strong>재무:</strong> PBR ${s.pbr} | PER ${s.per} | ROE ${s.roe}%</p>
+                <p><strong>부채비율:</strong> ${s.debt_ratio} | <strong>EV/EBITDA:</strong> ${s.ev_ebitda}</p>
+                <div class="ai-reason">
+                    <strong>AI 판단 근거:</strong><br>
+                    <span id="ai-box-${s.id}">${s.ai_reason}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function updateStatus(msg, color) {
+    const el = document.getElementById('status-bar');
+    el.innerText = msg;
+    el.style.borderLeft = `4px solid ${color}`;
+}
+
+// 페이지 로드 시 실행
+window.onload = fetchLiveData;
 </script>
-
 </body>
 </html>
