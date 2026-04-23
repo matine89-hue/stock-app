@@ -1,137 +1,193 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>국장 스크리너</title>
 
 <style>
-body { font-family: Arial; margin:20px; background:#111; color:#fff; }
-.item { padding:10px; border-bottom:1px solid #333; }
-button { margin:5px; padding:8px 12px; }
-input { padding:6px; margin:5px; width:200px; }
+body {
+  margin:0;
+  font-family: Arial, sans-serif;
+  background:#111;
+  color:#fff;
+}
+
+header {
+  padding:10px;
+  background:#1a1a1a;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.container {
+  padding:10px;
+}
+
+.section {
+  margin-bottom:20px;
+}
+
+.card {
+  background:#1c1c1c;
+  padding:10px;
+  margin-bottom:8px;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+.score {
+  float:right;
+  font-weight:bold;
+}
+
+button {
+  padding:10px;
+  width:100%;
+  margin-top:10px;
+  background:#2c2c2c;
+  color:white;
+  border:none;
+  border-radius:6px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>국장 스크리너</h2>
+<header>
+  <div>국장스크리너</div>
+  <div>🔔</div>
+</header>
 
-<div>
-  <input id="appkey" placeholder="App Key">
-  <input id="appsecret" placeholder="App Secret">
-  <button onclick="getToken()">토큰 발급</button>
+<div class="container">
+
+  <div class="section">
+    <button onclick="loadData()">📡 실시간 데이터 불러오기</button>
+  </div>
+
+  <div class="section">
+    <h3>📊 코스피</h3>
+    <div id="kospi"></div>
+  </div>
+
+  <div class="section">
+    <h3>📈 코스닥</h3>
+    <div id="kosdaq"></div>
+  </div>
+
 </div>
-
-<div>
-  <button onclick="loadStocks('KOSPI')">📊 코스피</button>
-  <button onclick="loadStocks('KOSDAQ')">📈 코스닥</button>
-</div>
-
-<h3>종목 리스트</h3>
-<div id="stockList"></div>
 
 <script>
-let token = '';
-let appkey = '';
-let appsecret = '';
 
-/* ===================== 토큰 ===================== */
+// 🔐 저장된 키
+let APP_KEY = localStorage.getItem('appkey') || '';
+let APP_SECRET = localStorage.getItem('appsecret') || '';
+let TOKEN = localStorage.getItem('token') || '';
+
 async function getToken() {
-  appkey = document.getElementById('appkey').value;
-  appsecret = document.getElementById('appsecret').value;
-
   const res = await fetch('/api/kis-proxy', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      action: 'getToken',
-      appkey,
-      appsecret
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      action:'getToken',
+      appkey:APP_KEY,
+      appsecret:APP_SECRET
     })
   });
 
   const data = await res.json();
-  console.log('토큰응답:', data);
-
-  if (!data.access_token) {
-    alert('토큰 발급 실패');
-    return;
-  }
-
-  token = data.access_token;
-  alert('토큰 발급 완료');
+  TOKEN = data.access_token;
+  localStorage.setItem('token', TOKEN);
 }
 
-/* ===================== 점수 ===================== */
-function calculateScore(s) {
+// 🔥 점수 계산 (자동)
+function calcScore(item) {
   let score = 0;
 
-  if (s.per && Number(s.per) < 10) score++;
-  if (s.pbr && Number(s.pbr) < 1) score++;
-  if (s.prdy_vrss_vol_rate && Number(s.prdy_vrss_vol_rate) > 150) score++;
-  if (s.frgn_ntby_qty && Number(s.frgn_ntby_qty) > 0) score++;
+  const rate = Number(item.prdy_ctrt || 0);
+  const vol  = Number(item.acml_vol || 0);
+  const diff = Number(item.prdy_vrss || 0);
 
-  return score;
+  if (rate > 5) score += 2;
+  if (vol > 1000000) score += 2;
+  if (diff > 0) score += 1;
+
+  return { ...item, score };
 }
 
-/* ===================== 종목 불러오기 ===================== */
-async function loadStocks(market) {
+// 🔥 렌더
+function renderList(elId, list) {
+  const el = document.getElementById(elId);
+  el.innerHTML = '';
 
-  if (!token) {
-    alert('토큰 먼저 발급');
-    return;
+  list.slice(0,20).forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'card';
+
+    div.innerHTML = `
+      ${item.hts_kor_isnm || item.stck_shrn_iscd}
+      <span class="score">${item.score}점</span>
+    `;
+
+    el.appendChild(div);
+  });
+}
+
+// 🔥 핵심: 데이터 로드 + 자동 점수 계산
+async function loadData() {
+
+  if (!TOKEN) {
+    await getToken();
   }
 
-  const res = await fetch('/api/kis-proxy', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      action: 'volumeRank',
-      market,
-      token,
-      appkey,
-      appsecret
-    })
-  });
+  try {
 
-  const data = await res.json();
-  console.log('API응답:', data);
+    // 코스피
+    const kospiRes = await fetch('/api/kis-proxy', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        action:'volumeRank',
+        market:'KOSPI',
+        appkey:APP_KEY,
+        appsecret:APP_SECRET,
+        token:TOKEN
+      })
+    });
 
-  if (!data.output || data.output.length === 0) {
-    alert('데이터 없음 (API 확인)');
-    return;
+    // 코스닥
+    const kosdaqRes = await fetch('/api/kis-proxy', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        action:'volumeRank',
+        market:'KOSDAQ',
+        appkey:APP_KEY,
+        appsecret:APP_SECRET,
+        token:TOKEN
+      })
+    });
+
+    const kospiData = await kospiRes.json();
+    const kosdaqData = await kosdaqRes.json();
+
+    const kospiList = (kospiData.output || []).map(calcScore);
+    const kosdaqList = (kosdaqData.output || []).map(calcScore);
+
+    console.log('코스피:', kospiList.length);
+    console.log('코스닥:', kosdaqList.length);
+
+    renderList('kospi', kospiList);
+    renderList('kosdaq', kosdaqList);
+
+  } catch (e) {
+    console.error(e);
+    alert('데이터 불러오기 실패');
   }
-
-  let list = data.output;
-
-  // 🔥 자동 점수 계산 (핵심)
-  list.forEach(s => {
-    s.score = calculateScore(s);
-  });
-
-  renderList(list);
 }
 
-/* ===================== 화면 출력 ===================== */
-function renderList(list) {
-
-  const el = document.getElementById('stockList');
-  if (!el) return;
-
-  el.innerHTML = list.map(s => `
-    <div class="item">
-      <b>${s.hts_kor_isnm || '-'}</b><br>
-      가격: ${s.stck_prpr || '-'}<br>
-      거래량: ${s.acml_vol || '-'}<br>
-      PER: ${s.per || '-'} / PBR: ${s.pbr || '-'}<br>
-      ⭐ 점수: ${s.score ?? 0}
-    </div>
-  `).join('');
-}
 </script>
 
 </body>
