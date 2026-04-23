@@ -503,6 +503,7 @@ function fetchLiveData() {
     var kospiRaw  = results[0];
     var kosdaqRaw = results[1];
 
+    // 1단계: 기본 종목 목록 생성
     function buildList(rawList, mkt) {
       var result = [];
       for (var i = 0; i < rawList.length; i++) {
@@ -514,10 +515,11 @@ function fetchLiveData() {
         var volNum = parseInt(item.acml_vol || 0);
         var vol    = volNum > 0 ? (volNum >= 10000 ? Math.round(volNum/10000) + '만' : volNum.toLocaleString()) + '주' : '—';
         var w52    = parseFloat(item.d250_hgpr_vrss_prpr_rate || 0);
+        if (!code || !name) continue;
         result.push({
           id: code, name: name, price: price, chg: chg, vol: vol, w52: w52,
           sector: item.bstp_kor_isnm || '기타',
-          intro: name + ' — 거래량 상위 종목. 클릭하면 재무정보가 로드됩니다.',
+          intro: name + ' — 거래량 상위 종목',
           tags: ['거래량상위'], news: [], history: [],
           pbr: 0, per: 0, roe: 0, debt: 0, ev: 0, div: 0,
           foreign: '—', shortScore: 3.0, midScore: 3.0,
@@ -527,26 +529,87 @@ function fetchLiveData() {
       return result;
     }
 
-    if (kospiRaw.length > 0) {
-      KOSPI_STOCKS.length = 0;
-      var kp = buildList(kospiRaw, 'KOSPI');
-      for (var i = 0; i < kp.length; i++) KOSPI_STOCKS.push(kp[i]);
-    }
-    if (kosdaqRaw.length > 0) {
-      KOSDAQ_STOCKS.length = 0;
-      var kd = buildList(kosdaqRaw, 'KOSDAQ');
-      for (var i = 0; i < kd.length; i++) KOSDAQ_STOCKS.push(kd[i]);
-    }
+    var kospiList  = buildList(kospiRaw,  'KOSPI');
+    var kosdaqList = buildList(kosdaqRaw, 'KOSDAQ');
 
-    // AI 캐시 초기화
+    KOSPI_STOCKS.length  = 0;
+    KOSDAQ_STOCKS.length = 0;
+    for (var i = 0; i < kospiList.length;  i++) KOSPI_STOCKS.push(kospiList[i]);
+    for (var i = 0; i < kosdaqList.length; i++) KOSDAQ_STOCKS.push(kosdaqList[i]);
     for (var k in aiCache) { delete aiCache[k]; }
 
     renderList();
-    var now = new Date().toLocaleTimeString('ko-KR');
-    setFetchStatus('var(--green)', '✓ 업데이트 완료 (' + now + ') — 종목 클릭 시 재무지표 자동 로드');
+    setFetchStatus('var(--text2)', '재무지표 불러오는 중... (잠시 기다려주세요)');
+
+    // 2단계: 각 종목 재무지표 순차 조회 (API 부하 방지: 0.3초 간격)
+    var allStocks = KOSPI_STOCKS.concat(KOSDAQ_STOCKS);
+    var idx = 0;
+
+    function calcScore(s) {
+      var score = 3.0;
+      if (s.pbr > 0 && s.pbr < 0.5) score += 1.0;
+      else if (s.pbr > 0 && s.pbr < 1.0) score += 0.5;
+      else if (s.pbr > 3.0) score -= 0.5;
+      if (s.w52 <= -50) score += 1.0;
+      else if (s.w52 <= -30) score += 0.5;
+      else if (s.w52 >= 30) score -= 0.5;
+      if (s.chg >= 5) score += 0.5;
+      else if (s.chg >= 2) score += 0.3;
+      else if (s.chg <= -5) score -= 0.5;
+      if (s.per > 0 && s.per < 10) score += 0.3;
+      else if (s.per > 30) score -= 0.3;
+      if (s.roe > 15) score += 0.2;
+      if (s.foreign && s.foreign.indexOf('+') === 0 && s.foreign !== '+0억') score += 0.3;
+      return parseFloat(Math.max(0, Math.min(5, score)).toFixed(1));
+    }
+
+    function loadNext() {
+      if (idx >= allStocks.length) {
+        renderList();
+        var now = new Date().toLocaleTimeString('ko-KR');
+        setFetchStatus('var(--green)', '✓ 전체 업데이트 완료 (' + now + ')');
+        if (btn) { btn.textContent = '📡 실시간 데이터 불러오기'; btn.disabled = false; }
+        return;
+      }
+      var s = allStocks[idx];
+      idx++;
+      setFetchStatus('var(--text2)', '재무지표 로드 중... (' + idx + '/' + allStocks.length + ') ' + s.name);
+      fetchStockDetail(s.id, s._market).then(function(detail) {
+        if (detail) {
+          var curPrice  = parseInt(detail.stck_prpr || 0);
+          var prevClose = parseInt(detail.stck_sdpr  || 0);
+          var pbr = parseFloat(detail.pbr || 0);
+          var per = parseFloat(detail.per || 0);
+          var bps = parseFloat(detail.bps || 0);
+          var eps = parseFloat(detail.eps || 0);
+          var roe = (bps > 0 && eps > 0) ? parseFloat((eps/bps*100).toFixed(1)) : 0;
+          var high52  = parseInt(detail.d250_hgpr || 0);
+          var frgnQty = parseInt(detail.frgn_ntby_qty || 0);
+          var divi    = parseFloat(detail.stck_divi || 0);
+
+          if (curPrice > 0) s.price = curPrice;
+          if (prevClose > 0) s._prevClose = prevClose;
+          if (pbr > 0) s.pbr = pbr;
+          if (per > 0) s.per = per;
+          if (roe > 0) s.roe = roe;
+          if (high52 > 0 && s.price > 0) s.w52 = Math.round((s.price - high52) / high52 * 100);
+          if (divi > 0 && s.price > 0) s.div = parseFloat((divi / s.price * 100).toFixed(2));
+          if (detail.bstp_kor_isnm) s.sector = detail.bstp_kor_isnm;
+          if (frgnQty !== 0 && s.price > 0) {
+            var amt = Math.round(frgnQty * s.price / 100000000);
+            s.foreign = amt >= 0 ? '+' + amt + '억' : amt + '억';
+          }
+          s.intro = s.name + ' — ' + (detail.bstp_kor_isnm || s.sector) + ' · ' + s._market;
+          s.shortScore = calcScore(s);
+          s.midScore   = parseFloat(Math.max(0, Math.min(5, s.shortScore - 0.3 + (s.w52 <= -30 ? 0.3 : 0))).toFixed(1));
+        }
+        setTimeout(loadNext, 300);
+      }).catch(function() { setTimeout(loadNext, 300); });
+    }
+
+    loadNext();
   }).catch(function(e) {
     setFetchStatus('var(--red)', '오류: ' + e.message);
-  }).then(function() {
     if (btn) { btn.textContent = '📡 실시간 데이터 불러오기'; btn.disabled = false; }
   });
 }
