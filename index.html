@@ -1,85 +1,68 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<title>국장 스크리너</title>
-<style>
-body { background:#111; color:#eee; font-family:Arial; }
-.card { padding:10px; border-bottom:1px solid #333; }
-.up { color:red; }
-.down { color:skyblue; }
-.score { float:right; }
-.market { font-size:12px; opacity:0.6; }
-</style>
-</head>
-<body>
-
-<button onclick="loadStocks()">불러오기</button>
-<div id="list"></div>
-
 <script>
+let token = '';
+let appkey = '';
+let appsecret = '';
 
-// ✅ 점수 함수
-function calculateScore(s){
+function calculateScore(stock) {
   let score = 0;
-  if(Number(s.prdy_ctrt) > 3) score++;
-  if(Number(s.acml_vol) > 1000000) score++;
-  if(Number(s.prdy_vrss) > 0) score++;
+
+  if (stock.per && stock.per < 10) score++;
+  if (stock.pbr && stock.pbr < 1) score++;
+  if (stock.volume_ratio > 150) score++;
+  if (stock.foreign_buy) score++;
+
   return score;
 }
 
-// ✅ 로드
-async function loadStocks(){
-
-  const res = await fetch('/api/kis-proxy',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ action:'volumeRank' })
+async function loadStocks(market) {
+  const res = await fetch('/api/kis-proxy', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      action: 'volumeRank',
+      market,
+      token,
+      appkey,
+      appsecret
+    })
   });
 
   const data = await res.json();
+  console.log('API응답:', data);
 
-  // 🔥 여기서 계산 끝내야 한다
-  let list = (data.output || []).map(s => ({
-    ...s,
-    score: calculateScore(s)
+  const list = data.output || [];
+
+  const mapped = list.map(s => ({
+    code: s.mksc_shrn_iscd,
+    name: s.hts_kor_isnm,
+    price: Number(s.stck_prpr),
+    volume: Number(s.acml_vol),
+    per: Number(s.per),
+    pbr: Number(s.pbr),
+    volume_ratio: Number(s.prdy_vrss_vol_rate),
+    foreign_buy: Number(s.frgn_ntby_qty) > 0
   }));
 
-  // 정렬
-  list.sort((a,b)=>b.score-a.score);
-
-  render(list);
-}
-
-// ✅ 렌더
-function render(list){
-
-  const el = document.getElementById('list');
-  el.innerHTML = '';
-
-  list.forEach(s=>{
-
-    const div = document.createElement('div');
-    div.className='card';
-
-    const change = Number(s.prdy_ctrt);
-    const cls = change>=0?'up':'down';
-
-    div.innerHTML = `
-      <b>${s.hts_kor_isnm}</b> 
-      <span class="${cls}">${change}%</span>
-      <span class="score">⭐${s.score}</span>
-      <div class="market">${s.market}</div>
-    `;
-
-    // 🔴 클릭 이벤트 완전 제거 (중요)
-    // div.onclick = ...
-
-    el.appendChild(div);
+  // 🔥 자동 점수 계산 (핵심)
+  mapped.forEach(s => {
+    s.score = calculateScore(s);
   });
+
+  renderList(mapped);
 }
 
-</script>
+function renderList(list) {
+  const el = document.getElementById('stockList');
+  if (!el) return;
 
-</body>
-</html>
+  el.innerHTML = list.map(s => `
+    <div class="item">
+      <div>${s.name}</div>
+      <div>${s.price}</div>
+      <div>⭐ ${s.score}</div>
+    </div>
+  `).join('');
+}
+</script>
