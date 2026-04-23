@@ -1,159 +1,86 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<title>국장 스크리너 - 수정본</title>
-</head>
-<body>
-
-<div id="status-bar" onclick="showSettings()">설정이 필요하면 클릭하세요.</div>
-<div id="stock-list" class="grid"></div>
-
 <script>
 const PROXY_URL = '/api/kis-proxy';
-let ALL_STOCKS = [];
+let STOCKS_KOSPI = [], STOCKS_KOSDAQ = [];
 
-// 1. 기존 토큰/설정 체크 로직 유지
-function checkCredentials() {
-    const t = localStorage.getItem('t');
-    const ak = localStorage.getItem('ak');
-    const as = localStorage.getItem('as');
-    if (!t || !ak || !as) {
-        alert("API 설정(토큰/앱키)이 필요합니다. 설정 창을 엽니다.");
-        // showSettings(); // 기존에 존재하던 설정창 표시 함수 호출
-        return false;
-    }
-    return { t, ak, as };
-}
+// 1. 실시간 데이터 불러올 때 재무지표+점수까지 한꺼번에 처리
+function fetchLiveData() {
+  var t = localStorage.getItem('t'), ak = localStorage.getItem('ak'), as = localStorage.getItem('as');
+  if (!t || !ak || !as) {
+    alert('설정에서 API 정보를 먼저 입력하세요.');
+    showSettings(); // 기존 UI 함수 호출
+    return;
+  }
 
-// 2. 실시간 데이터 불러오기 (수정됨: 불러올 때 점수/재무지표 모두 계산)
-async function fetchLiveData() {
-    const cred = checkCredentials();
-    if (!cred) return;
+  setFetchStatus('var(--amber)', '데이터 분석 및 점수 계산 중...');
 
-    updateStatus("데이터 분석 중...", "var(--amber)");
-
-    try {
-        const response = await fetch(PROXY_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'rank', 
-                token: cred.t, 
-                appkey: cred.ak, 
-                appsecret: cred.as 
-            })
+  Promise.all([fetchVolumeRanking('KOSPI'), fetchVolumeRanking('KOSDAQ')])
+    .then(function(results) {
+      // 종목 리스트를 가져온 후, 각 종목별로 재무 데이터를 병렬로 즉시 호출
+      var allStocks = results[0].concat(results[1]);
+      var detailPromises = allStocks.slice(0, 20).map(function(s) {
+        var code = s.mksc_shrn_iscd || s.stck_shrn_iscd;
+        return fetchStockDetail(code).then(function(detail) {
+          if (detail) {
+            // 데이터 바인딩 (기존에 안나오던 지표들)
+            s.pbr = detail.pbr || '0.00';
+            s.per = detail.per || '0.00';
+            s.roe = detail.roe || '0.00';
+            s.eps = detail.eps || '0';
+            s.bps = detail.bps || '0';
+            s.sector = detail.bstp_nm || '일반'; // 회사소개 대용
+            s.debt_ratio = detail.pbr > 0 ? "정상" : "체크필요"; // 부채비율 대용
+            
+            // 점수 계산 (종목 누를 때가 아니라 여기서 실행)
+            s.score = calculateTotalScore(s); 
+            // AI 분석도 미리 요청
+            requestAIAnalysis(s); 
+          }
+          return s;
         });
-        const data = await response.json();
-        const list = data.output || [];
+      });
 
-        // 핵심 수정: 종목을 누르기 전, 리스트 생성 시점에 재무/점수 계산
-        const analyzedList = await Promise.all(list.slice(0, 15).map(async (s) => {
-            const stockCode = s.mksc_shrn_iscd || s.stck_shrn_iscd;
-            
-            // 상세 재무 정보 가져오기
-            const detailRes = await fetch(PROXY_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'inquirePrice', 
-                    stockCode: stockCode, 
-                    token: cred.t, 
-                    appkey: cred.ak, 
-                    appsecret: cred.as 
-                })
-            });
-            const detailData = await detailRes.json();
-            const out = detailData.output || {};
-
-            const stockObj = {
-                id: stockCode,
-                name: s.hts_kor_isnm,
-                price: s.stck_prpr,
-                chg: s.prdy_ctrt,
-                pbr: out.pbr || '0',
-                per: out.per || '0',
-                roe: out.roe || '0',
-                // 부채비율은 API 항목에 따라 매핑 (보통 pbr_debt_ratio 등으로 올 수 있음)
-                debt: out.pbr > 0 ? "정상" : "자료부족", 
-                intro: out.bstp_nm || "국내 주식",
-                ai: "분석 대기 중..."
-            };
-
-            // 점수 계산 및 AI 분석 자동 호출
-            stockObj.score = calculateScore(stockObj);
-            requestAI(stockObj, cred); 
-            
-            return stockObj;
-        }));
-
-        ALL_STOCKS = analyzedList;
-        renderList();
-        updateStatus("✅ 실시간 정보 업데이트 완료", "var(--green)");
-    } catch (e) {
-        updateStatus("데이터 로드 실패", "var(--red)");
-    }
-}
-
-// 점수 계산 (5점 만점)
-function calculateScore(s) {
-    let score = 1;
-    if (parseFloat(s.pbr) < 1.0 && parseFloat(s.pbr) > 0) score += 1;
-    if (parseFloat(s.roe) > 10) score += 1;
-    if (parseFloat(s.chg) > 0) score += 1;
-    if (parseFloat(s.per) < 12 && parseFloat(s.per) > 0) score += 1;
-    return score;
-}
-
-// AI 분석 (기존에 안나오던 문제 해결)
-function requestAI(s, cred) {
-    const prompt = `${s.name} 종목. PBR ${s.pbr}, ROE ${s.roe}%. 단기 매수 적합성 분석해줘.`;
-    fetch(PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'aiAnalysis', prompt: prompt })
+      return Promise.all(detailPromises);
     })
-    .then(r => r.json())
-    .then(data => {
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "분석 실패";
-        s.ai = text;
-        const target = document.getElementById(`ai-text-${s.id}`);
-        if(target) target.innerText = text;
+    .then(function(analyzedStocks) {
+      // 결과 분류 및 화면 렌더링
+      STOCKS_KOSPI = analyzedStocks.filter(s => s.market === 'KOSPI');
+      STOCKS_KOSDAQ = analyzedStocks.filter(s => s.market === 'KOSDAQ');
+      renderList();
+      setFetchStatus('var(--green)', '✅ 분석 완료 (점수 및 재무 반영)');
+    })
+    .catch(function(e) {
+      setFetchStatus('var(--red)', '오류 발생: ' + e.message);
     });
 }
 
-function renderList() {
-    const container = document.getElementById('stock-list');
-    container.innerHTML = ALL_STOCKS.map(s => `
-        <div class="card" onclick="toggleDetail('${s.id}')">
-            <div class="badge">추천도 ${s.score}점</div>
-            <div style="font-weight:bold;">${s.name} (${s.id})</div>
-            <div style="color:${parseFloat(s.chg) >= 0 ? 'var(--red)' : 'var(--blue)'}">${s.price} (${s.chg}%)</div>
-            
-            <div id="detail-${s.id}" class="detail-area" style="display:none; margin-top:10px;">
-                <p><strong>회사소개:</strong> ${s.intro}</p>
-                <p><strong>PBR:</strong> ${s.pbr} | <strong>PER:</strong> ${s.per} | <strong>ROE:</strong> ${s.roe}%</p>
-                <div class="ai-box">
-                    <strong>AI 판단 근거:</strong><br>
-                    <span id="ai-text-${s.id}">${s.ai}</span>
-                </div>
-            </div>
-        </div>
-    `).join('');
+// 2. AI 판단 근거가 제대로 출력되도록 수정
+function requestAIAnalysis(s) {
+  var prompt = s.name + ' 종목 분석: PBR ' + s.pbr + ', ROE ' + s.roe + '%. 5일 이내 단기 투자 판단 근거를 3문장으로 설명.';
+
+  fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'aiAnalysis', prompt: prompt })
+  }).then(r => r.json())
+  .then(data => {
+    // Gemini API 응답 경로 수정
+    var aiText = data.candidates && data.candidates[0] && data.candidates[0].content 
+                 ? data.candidates[0].content.parts[0].text 
+                 : '분석 데이터를 가져올 수 없습니다.';
+    s.ai_reason = aiText;
+    
+    // UI에 즉시 반영 (ID 기반)
+    var el = document.getElementById('ai-reason-' + (s.mksc_shrn_iscd || s.stck_shrn_iscd));
+    if (el) el.innerText = aiText;
+  });
 }
 
-function toggleDetail(id) {
-    const el = document.getElementById(`detail-${id}`);
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-
-function updateStatus(msg, color) {
-    const bar = document.getElementById('status-bar');
-    if(bar) {
-        bar.innerText = msg;
-        bar.style.borderLeft = `4px solid ${color}`;
-    }
+// 3. 점수 계산 로직 (기존 함수 유지하되 s 객체 사용)
+function calculateTotalScore(s) {
+  var sc = 1;
+  if (parseFloat(s.pbr) < 1.0 && parseFloat(s.pbr) > 0) sc += 1;
+  if (parseFloat(s.roe) > 10) sc += 1;
+  if (parseFloat(s.prdy_ctrt) > 0) sc += 1;
+  return Math.min(sc, 5);
 }
 </script>
-</body>
-</html>
