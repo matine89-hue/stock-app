@@ -1,20 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>국장 스크리너</title>
+
+<style>
+body { font-family: Arial; margin:20px; }
+.item { padding:10px; border-bottom:1px solid #ddd; }
+button { margin:5px; }
+</style>
+</head>
+
+<body>
+
+<h2>국장 스크리너</h2>
+
+<div>
+  <input id="appkey" placeholder="App Key">
+  <input id="appsecret" placeholder="App Secret">
+  <button onclick="getToken()">토큰발급</button>
+</div>
+
+<div>
+  <button onclick="loadStocks('KOSPI')">코스피</button>
+  <button onclick="loadStocks('KOSDAQ')">코스닥</button>
+</div>
+
+<h3>종목 리스트</h3>
+<div id="stockList"></div>
+
 <script>
 let token = '';
 let appkey = '';
 let appsecret = '';
 
-function calculateScore(stock) {
+async function getToken() {
+  appkey = document.getElementById('appkey').value;
+  appsecret = document.getElementById('appsecret').value;
+
+  const res = await fetch('/api/kis-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'getToken',
+      appkey,
+      appsecret
+    })
+  });
+
+  const data = await res.json();
+  token = data.access_token;
+
+  alert('토큰 발급 완료');
+}
+
+function calculateScore(s) {
   let score = 0;
 
-  if (stock.per && stock.per < 10) score++;
-  if (stock.pbr && stock.pbr < 1) score++;
-  if (stock.volume_ratio > 150) score++;
-  if (stock.foreign_buy) score++;
+  if (s.per && s.per < 10) score++;
+  if (s.pbr && s.pbr < 1) score++;
+  if (s.prdy_vrss_vol_rate && s.prdy_vrss_vol_rate > 150) score++;
+  if (s.frgn_ntby_qty && Number(s.frgn_ntby_qty) > 0) score++;
 
   return score;
 }
 
 async function loadStocks(market) {
+
   const res = await fetch('/api/kis-proxy', {
     method: 'POST',
     headers: {
@@ -34,35 +86,29 @@ async function loadStocks(market) {
 
   const list = data.output || [];
 
-  const mapped = list.map(s => ({
-    code: s.mksc_shrn_iscd,
-    name: s.hts_kor_isnm,
-    price: Number(s.stck_prpr),
-    volume: Number(s.acml_vol),
-    per: Number(s.per),
-    pbr: Number(s.pbr),
-    volume_ratio: Number(s.prdy_vrss_vol_rate),
-    foreign_buy: Number(s.frgn_ntby_qty) > 0
-  }));
-
-  // 🔥 자동 점수 계산 (핵심)
-  mapped.forEach(s => {
+  // 🔥 자동 점수 계산
+  list.forEach(s => {
     s.score = calculateScore(s);
   });
 
-  renderList(mapped);
+  renderList(list);
 }
 
 function renderList(list) {
+
   const el = document.getElementById('stockList');
-  if (!el) return;
 
   el.innerHTML = list.map(s => `
     <div class="item">
-      <div>${s.name}</div>
-      <div>${s.price}</div>
-      <div>⭐ ${s.score}</div>
+      <b>${s.hts_kor_isnm}</b><br>
+      가격: ${s.stck_prpr}<br>
+      거래량: ${s.acml_vol}<br>
+      ⭐ 점수: ${s.score}
     </div>
   `).join('');
 }
+
 </script>
+
+</body>
+</html>
