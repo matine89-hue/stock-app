@@ -4,149 +4,82 @@
 <meta charset="UTF-8">
 <title>국장 스크리너</title>
 <style>
-body { font-family: Arial; background:#111; color:#eee; }
+body { background:#111; color:#eee; font-family:Arial; }
 .card { padding:10px; border-bottom:1px solid #333; }
-.up { color:#ff4d4d; }
-.down { color:#4da6ff; }
-.score { float:right; font-weight:bold; }
+.up { color:red; }
+.down { color:skyblue; }
+.score { float:right; }
+.market { font-size:12px; opacity:0.6; }
 </style>
 </head>
-
 <body>
 
-<h2>국장 스크리너</h2>
-
-<button onclick="loadStocks()">📡 실시간 데이터 불러오기</button>
-
+<button onclick="loadStocks()">불러오기</button>
 <div id="list"></div>
 
 <script>
 
-// =====================
-// 🔐 로컬 저장 키
-// =====================
-const KEY_APP = 'kis_appkey';
-const KEY_SEC = 'kis_appsecret';
-const KEY_TOKEN = 'kis_token';
-
-// =====================
-// 🔧 점수 계산 (업그레이드)
-// =====================
-function calculateScore(stock) {
+// ✅ 점수 함수
+function calculateScore(s){
   let score = 0;
-
-  const change = Number(stock.prdy_ctrt);
-  const volume = Number(stock.acml_vol);
-  const price  = Number(stock.stck_prpr);
-
-  if (change > 3) score++;
-  if (volume > 1000000) score++;
-  if (price > 1000) score++;
-  if (Number(stock.prdy_vrss) > 0) score++;
-
+  if(Number(s.prdy_ctrt) > 3) score++;
+  if(Number(s.acml_vol) > 1000000) score++;
+  if(Number(s.prdy_vrss) > 0) score++;
   return score;
 }
 
-// =====================
-// 🔥 핵심: 데이터 로드
-// =====================
-async function loadStocks() {
+// ✅ 로드
+async function loadStocks(){
 
-  const appkey = localStorage.getItem(KEY_APP);
-  const appsecret = localStorage.getItem(KEY_SEC);
-  const token = localStorage.getItem(KEY_TOKEN);
-
-  if (!appkey || !appsecret || !token) {
-    alert('API 키 먼저 입력');
-    return;
-  }
-
-  const res = await fetch('/api/kis-proxy', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({
-      action:'volumeRank',
-      appkey,
-      appsecret,
-      token
-    })
+  const res = await fetch('/api/kis-proxy',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ action:'volumeRank' })
   });
 
   const data = await res.json();
 
-  // 🔥 자동 점수 계산
-  let stocks = (data.output || []).map(s => ({
+  // 🔥 여기서 계산 끝내야 한다
+  let list = (data.output || []).map(s => ({
     ...s,
     score: calculateScore(s)
   }));
 
-  // 🔥 정렬 (점수 높은 순)
-  stocks.sort((a,b)=>b.score - a.score);
+  // 정렬
+  list.sort((a,b)=>b.score-a.score);
 
-  // 🔥 필터 (추천 4점 이상)
-  stocks = stocks.filter(s => s.score >= 4);
-
-  render(stocks);
+  render(list);
 }
 
-// =====================
-// 📊 렌더링
-// =====================
-function render(list) {
+// ✅ 렌더
+function render(list){
 
   const el = document.getElementById('list');
   el.innerHTML = '';
 
-  list.forEach(s => {
+  list.forEach(s=>{
 
     const div = document.createElement('div');
-    div.className = 'card';
+    div.className='card';
 
     const change = Number(s.prdy_ctrt);
-    const cls = change >= 0 ? 'up' : 'down';
+    const cls = change>=0?'up':'down';
 
     div.innerHTML = `
-      <span>${s.hts_kor_isnm}</span>
+      <b>${s.hts_kor_isnm}</b> 
       <span class="${cls}">${change}%</span>
       <span class="score">⭐${s.score}</span>
-      <div>거래량: ${Number(s.acml_vol).toLocaleString()}</div>
+      <div class="market">${s.market}</div>
     `;
+
+    // 🔴 클릭 이벤트 완전 제거 (중요)
+    // div.onclick = ...
 
     el.appendChild(div);
   });
 }
 
-// =====================
-// 🔑 토큰 발급
-// =====================
-async function getToken() {
-
-  const appkey = prompt('AppKey 입력');
-  const appsecret = prompt('AppSecret 입력');
-
-  localStorage.setItem(KEY_APP, appkey);
-  localStorage.setItem(KEY_SEC, appsecret);
-
-  const res = await fetch('/api/kis-proxy', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      action:'getToken',
-      appkey,
-      appsecret
-    })
-  });
-
-  const data = await res.json();
-
-  localStorage.setItem(KEY_TOKEN, data.access_token);
-
-  alert('토큰 발급 완료');
-}
-
 </script>
-
-<button onclick="getToken()">🔑 토큰 발급</button>
 
 </body>
 </html>
