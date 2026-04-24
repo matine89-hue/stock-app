@@ -352,6 +352,10 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 <!-- Notification settings moved to Settings tab -->
 
 <script>
+// Gemini API 키 직접 설정 (선택사항 — 설정 시 프록시 없이 AI 분석 가능)
+// Vercel 환경변수 GEMINI_API_KEY 설정하면 프록시 경유로 자동 동작
+window.GEMINI_API_KEY = ''; // 여기에 직접 키 입력 가능 (보안 주의)
+
 // ═══════════════════════════════════════════════
 // 국장 스크리너 — 완전 ES5 재작성 (백틱/let/const/화살표함수 없음)
 // ═══════════════════════════════════════════════
@@ -516,14 +520,19 @@ function fetchLiveData() {
         var vol    = volNum > 0 ? (volNum >= 10000 ? Math.round(volNum/10000) + '만' : volNum.toLocaleString()) + '주' : '—';
         var w52    = parseFloat(item.d250_hgpr_vrss_prpr_rate || 0);
         if (!code || !name) continue;
+        // 장전/마감후엔 stck_prpr=0 → stck_sdpr(전일종가) 폴백
+        var prevClose = parseInt(item.stck_sdpr || 0);
+        var displayPrice = price > 0 ? price : prevClose;
+        var displayChg   = price > 0 ? chg : 0;
         result.push({
-          id: code, name: name, price: price, chg: chg, vol: vol, w52: w52,
+          id: code, name: name,
+          price: displayPrice, chg: displayChg, vol: vol, w52: w52,
           sector: item.bstp_kor_isnm || '기타',
-          intro: name + ' — 거래량 상위 종목',
+          intro: name + ' — 거래량 상위 종목. 재무정보 로드 중...',
           tags: ['거래량상위'], news: [], history: [],
           pbr: 0, per: 0, roe: 0, debt: 0, ev: 0, div: 0,
           foreign: '—', shortScore: 3.0, midScore: 3.0,
-          _market: mkt, _prevClose: 0
+          _market: mkt, _prevClose: prevClose
         });
       }
       return result;
@@ -587,7 +596,9 @@ function fetchLiveData() {
           var frgnQty = parseInt(detail.frgn_ntby_qty || 0);
           var divi    = parseFloat(detail.stck_divi || 0);
 
-          if (curPrice > 0) s.price = curPrice;
+          // 현재가 없으면 전일종가로 표시
+          if (curPrice > 0) { s.price = curPrice; }
+          else if (prevClose > 0) { s.price = prevClose; }
           if (prevClose > 0) s._prevClose = prevClose;
           if (pbr > 0) s.pbr = pbr;
           if (per > 0) s.per = per;
@@ -599,7 +610,12 @@ function fetchLiveData() {
             var amt = Math.round(frgnQty * s.price / 100000000);
             s.foreign = amt >= 0 ? '+' + amt + '억' : amt + '억';
           }
-          s.intro = s.name + ' — ' + (detail.bstp_kor_isnm || s.sector) + ' · ' + s._market;
+          var sectorName = detail.bstp_kor_isnm || s.sector || '기타';
+          var mktName = s._market === 'KOSPI' ? '코스피' : '코스닥';
+          s.intro = s.name + ' (' + mktName + ' ' + sectorName + ' 업종) — 거래량 상위 종목. '
+            + (s.pbr > 0 ? 'PBR ' + s.pbr.toFixed(2) + (s.pbr < 1 ? '(저평가)' : '') + ', ' : '')
+            + (s.per > 0 ? 'PER ' + s.per.toFixed(1) + ', ' : '')
+            + (s.w52 !== 0 ? '52주 고가 대비 ' + (s.w52 > 0 ? '+' : '') + s.w52 + '% 수준.' : '');
           s.shortScore = calcScore(s);
           s.midScore   = parseFloat(Math.max(0, Math.min(5, s.shortScore - 0.3 + (s.w52 <= -30 ? 0.3 : 0))).toFixed(1));
         }
@@ -982,6 +998,7 @@ function loadStockDetail(stockId) {
     var volNum = parseInt(detail.acml_vol || 0);
 
     if (curPrice > 0) { s.price = curPrice; }
+    else if (prevClose > 0) { s.price = prevClose; }
     if (prevClose > 0) s._prevClose = prevClose;
     s.chg = chg;
     if (pbr > 0) s.pbr = pbr;
@@ -1086,6 +1103,21 @@ function loadStockDetail(stockId) {
   });
 }
 
+// ── AI 응답 파싱 공통 함수 ──────────────────
+function handleAiResponse(data, stockId) {
+  var text = '분석 결과를 불러올 수 없습니다.';
+  if (data.candidates && data.candidates[0] && data.candidates[0].content
+      && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
+    text = data.candidates[0].content.parts[0].text || text;
+  } else if (data.error) {
+    var e = data.error;
+    text = '오류: ' + (typeof e === 'string' ? e : (e.message || JSON.stringify(e)));
+  }
+  aiCache[stockId] = text;
+  var el2 = document.getElementById('ai-text-' + stockId);
+  if (el2) el2.textContent = text;
+}
+
 // ── AI 분석 (Gemini) ─────────────────────────
 function loadAiAnalysis(stockId) {
   var el = document.getElementById('ai-text-' + stockId);
@@ -1111,26 +1143,36 @@ function loadAiAnalysis(stockId) {
     + '52주:' + (s.w52||0) + '%/외인:' + (s.foreign||'—') + '/등락:' + (s.chg||0) + '%\n'
     + '뉴스:' + newsText;
 
-  fetch(PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'aiAnalysis', prompt: prompt })
-  }).then(function(r) { return r.json(); })
-  .then(function(data) {
-    var text = '분석 결과를 불러올 수 없습니다.';
-    if (data.candidates && data.candidates[0] && data.candidates[0].content
-        && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
-      text = data.candidates[0].content.parts[0].text || text;
-    } else if (data.error) {
-      text = '오류: ' + (typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
-    }
-    aiCache[stockId] = text;
-    var el2 = document.getElementById('ai-text-' + stockId);
-    if (el2) el2.textContent = text;
-  }).catch(function(err) {
-    var el2 = document.getElementById('ai-text-' + stockId);
-    if (el2) el2.textContent = '분석 오류: ' + err.message;
-  });
+  // Gemini API 직접 호출 (브라우저에서 CORS 허용)
+  var GEMINI_KEY = window.GEMINI_API_KEY || '';
+  if (!GEMINI_KEY) {
+    // 프록시 경유 (GEMINI_KEY 없을 때)
+    fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'aiAnalysis', prompt: prompt })
+    }).then(function(r) { return r.json(); })
+    .then(function(data) { handleAiResponse(data, stockId); })
+    .catch(function(err) {
+      var el2 = document.getElementById('ai-text-' + stockId);
+      if (el2) el2.textContent = '분석 오류: ' + err.message;
+    });
+  } else {
+    // Gemini 직접 호출
+    fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + GEMINI_KEY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 400, temperature: 0.7 }
+      })
+    }).then(function(r) { return r.json(); })
+    .then(function(data) { handleAiResponse(data, stockId); })
+    .catch(function(err) {
+      var el2 = document.getElementById('ai-text-' + stockId);
+      if (el2) el2.textContent = '분석 오류: ' + err.message;
+    });
+  }
 }
 
 // ── 초기화 ────────────────────────────────────
