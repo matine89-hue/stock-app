@@ -79,7 +79,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'GEMINI_API_KEY 환경변수 미설정. Vercel > Settings > Environment Variables 에 추가하세요.' });
       }
       const r = await fetch(
-        'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=' + geminiKey,
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=' + geminiKey,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
