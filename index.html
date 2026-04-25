@@ -622,28 +622,44 @@ function fetchLiveData() {
             + (s.w52 !== 0 ? '52주 고가 대비 ' + (s.w52 > 0 ? '+' : '') + s.w52 + '% 수준.' : '');
           s.shortScore = calcScore(s);
           s.midScore   = parseFloat(Math.max(0, Math.min(5, s.shortScore - 0.3 + (s.w52 <= -30 ? 0.3 : 0))).toFixed(1));
-          // 최근 5거래일 점수 시뮬레이션 (실제 과거 데이터 없이 현재 지표 기반 추정)
+          // localStorage 기반 실제 기록 저장/조회
+          var histKey = 'hist_' + s.id;
+          var savedHist = [];
+          try { savedHist = JSON.parse(localStorage.getItem(histKey) || '[]'); } catch(e2) { savedHist = []; }
+
           var today2 = new Date();
-          s.history = [];
-          for (var hd = 4; hd >= 0; hd--) {
-            var d2 = new Date(today2);
-            // 주말 건너뛰기
-            d2.setDate(d2.getDate() - hd);
-            while (d2.getDay() === 0 || d2.getDay() === 6) { d2.setDate(d2.getDate() - 1); }
-            var dStr2 = (d2.getMonth()+1) + '/' + d2.getDate();
-            // 점수는 현재 점수 기반 ±0.5 범위 내 랜덤 추정
-            var estScore = parseFloat(Math.max(0, Math.min(5,
-              s.shortScore + (Math.random() - 0.5) * 0.8
-            )).toFixed(1));
-            var isToday2 = (hd === 0);
-            s.history.push({
-              d: dStr2,
-              score: isToday2 ? s.shortScore : estScore,
-              close: isToday2 ? s.price : 0,
-              nextClose: null,
-              ret: null
-            });
+          // 오늘 날짜 키 (주말이면 직전 금요일)
+          var tempDay = new Date(today2);
+          while (tempDay.getDay() === 0 || tempDay.getDay() === 6) { tempDay.setDate(tempDay.getDate()-1); }
+          var todayKey = (tempDay.getMonth()+1) + '/' + tempDay.getDate();
+
+          // 오늘 기록 있으면 업데이트, 없으면 추가
+          var foundToday = false;
+          for (var hi2=0; hi2<savedHist.length; hi2++) {
+            if (savedHist[hi2].d === todayKey) {
+              savedHist[hi2].score = s.shortScore;
+              savedHist[hi2].close = s.price;
+              foundToday = true;
+              break;
+            }
           }
+          if (!foundToday) {
+            savedHist.push({ d: todayKey, score: s.shortScore, close: s.price, nextClose: null, ret: null });
+          }
+          // 전날 nextClose/수익률 채우기
+          for (var hi3=0; hi3<savedHist.length-1; hi3++) {
+            var cur3 = savedHist[hi3];
+            var nxt3 = savedHist[hi3+1];
+            if (cur3.nextClose === null && nxt3.close > 0 && cur3.close > 0) {
+              cur3.nextClose = nxt3.close;
+              var retVal = ((nxt3.close - cur3.close) / cur3.close * 100);
+              cur3.ret = (retVal >= 0 ? '+' : '') + retVal.toFixed(2) + '%';
+            }
+          }
+          // 최근 5개만 유지
+          if (savedHist.length > 5) { savedHist = savedHist.slice(savedHist.length - 5); }
+          localStorage.setItem(histKey, JSON.stringify(savedHist));
+          s.history = savedHist;
         }
         setTimeout(loadNext, 300);
       }).catch(function() { setTimeout(loadNext, 300); });
@@ -1250,7 +1266,7 @@ function loadAiAnalysis(stockId) {
     });
   } else {
     // Gemini 직접 호출
-    fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + GEMINI_KEY, {
+    fetch('https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=' + GEMINI_KEY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
