@@ -225,7 +225,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
   <div class="market-bar">
     <div class="market-status">
       <div class="dot-live"></div>
-      <span style="font-size:11px;color:var(--text2)">장 마감 후 분석</span>
+      <span style="font-size:11px;color:var(--text2)" id="marketStatusText">장 마감 후 분석</span>
     </div>
     <div class="market-indices">
       <div class="idx"><span class="idx-name">KOSPI</span><span class="idx-val">2,538</span> <span class="idx-chg dn">-0.42%</span></div>
@@ -575,8 +575,12 @@ function fetchLiveData() {
     function loadNext() {
       if (idx >= allStocks.length) {
         renderList();
-        var now = new Date().toLocaleTimeString('ko-KR');
-        setFetchStatus('var(--green)', '✓ 전체 업데이트 완료 (' + now + ')');
+        var now = new Date();
+        var nowStr = now.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+        var dateStr = (now.getMonth()+1) + '/' + now.getDate() + ' ' + nowStr + ' 기준';
+        setFetchStatus('var(--green)', '✓ 전체 업데이트 완료 (' + dateStr + ')');
+        var msEl = document.getElementById('marketStatusText');
+        if (msEl) msEl.textContent = dateStr + ' 분석';
         if (btn) { btn.textContent = '📡 실시간 데이터 불러오기'; btn.disabled = false; }
         return;
       }
@@ -618,6 +622,17 @@ function fetchLiveData() {
             + (s.w52 !== 0 ? '52주 고가 대비 ' + (s.w52 > 0 ? '+' : '') + s.w52 + '% 수준.' : '');
           s.shortScore = calcScore(s);
           s.midScore   = parseFloat(Math.max(0, Math.min(5, s.shortScore - 0.3 + (s.w52 <= -30 ? 0.3 : 0))).toFixed(1));
+          // 오늘 날짜 기록 저장
+          var today = new Date();
+          var dStr = (today.getMonth()+1) + '/' + today.getDate();
+          if (!s.history) s.history = [];
+          // 오늘 기록이 없으면 추가
+          var hasToday = false;
+          for (var hi=0; hi<s.history.length; hi++) { if (s.history[hi].d===dStr) { hasToday=true; break; } }
+          if (!hasToday) {
+            s.history.push({ d:dStr, score:s.shortScore, close:s.price, nextClose:null, ret:null });
+            if (s.history.length > 5) s.history.shift();
+          }
         }
         setTimeout(loadNext, 300);
       }).catch(function() { setTimeout(loadNext, 300); });
@@ -1105,17 +1120,59 @@ function loadStockDetail(stockId) {
 
 // ── AI 응답 파싱 공통 함수 ──────────────────
 function handleAiResponse(data, stockId) {
-  var text = '분석 결과를 불러올 수 없습니다.';
-  if (data.candidates && data.candidates[0] && data.candidates[0].content
-      && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
-    text = data.candidates[0].content.parts[0].text || text;
-  } else if (data.error) {
-    var e = data.error;
-    text = '오류: ' + (typeof e === 'string' ? e : (e.message || JSON.stringify(e)));
-  }
-  aiCache[stockId] = text;
   var el2 = document.getElementById('ai-text-' + stockId);
-  if (el2) el2.textContent = text;
+  if (data.error) {
+    var e = data.error;
+    var errMsg = typeof e === 'string' ? e : (e.message || JSON.stringify(e));
+    if (el2) el2.textContent = '오류: ' + errMsg;
+    return;
+  }
+  if (!data.candidates || !data.candidates[0] || !data.candidates[0].content
+      || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
+    if (el2) el2.textContent = '응답 없음: ' + JSON.stringify(data).slice(0,100);
+    return;
+  }
+  var rawText = data.candidates[0].content.parts[0].text || '';
+  // JSON 파싱 시도
+  var parsed = null;
+  try {
+    // JSON 블록 추출 (백틱 없이 처리)
+    var jsonStr = rawText.trim();
+    var jsonStart = jsonStr.indexOf('{');
+    var jsonEnd   = jsonStr.lastIndexOf('}');
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      jsonStr = jsonStr.slice(jsonStart, jsonEnd+1);
+    }
+    parsed = JSON.parse(jsonStr);
+  } catch(e) {
+    // JSON 파싱 실패 시 텍스트 그대로 표시
+    aiCache[stockId] = rawText;
+    if (el2) el2.textContent = rawText;
+    return;
+  }
+  // 종목 데이터 업데이트
+  var all = KOSPI_STOCKS.concat(KOSDAQ_STOCKS);
+  var s = null;
+  for (var i=0; i<all.length; i++) { if (all[i].id===stockId) { s=all[i]; break; } }
+  if (s && parsed) {
+    if (parsed.intro) s.intro = parsed.intro;
+    if (parsed.news && parsed.news.length > 0) s.news = parsed.news;
+    if (parsed.tags && parsed.tags.length > 0) s.tags = parsed.tags;
+  }
+  aiCache[stockId] = parsed ? (parsed.analysis || rawText) : rawText;
+  if (el2) el2.textContent = parsed ? (parsed.analysis || rawText) : rawText;
+  // 카드 회사소개/뉴스/태그 DOM 업데이트
+  var card = document.getElementById('card-' + stockId);
+  if (card && parsed) {
+    var introEl = card.querySelector('.company-intro');
+    if (introEl && parsed.intro) introEl.innerHTML = '<strong>회사 소개</strong><br>' + parsed.intro;
+    var tagsEl = card.querySelector('.tags');
+    if (tagsEl && parsed.tags) {
+      var tagHtml = '';
+      for (var ti=0; ti<parsed.tags.length; ti++) tagHtml += '<span class="tag ' + tagColor(parsed.tags[ti]) + '">' + parsed.tags[ti] + '</span>';
+      tagsEl.innerHTML = tagHtml;
+    }
+  }
 }
 
 // ── AI 분석 (Gemini) ─────────────────────────
@@ -1137,11 +1194,20 @@ function loadAiAnalysis(stockId) {
     for (var j = 0; j < s.news.length; j++) nts.push(s.news[j].t);
     newsText = nts.join(' | ');
   }
-  var prompt = '당신은 한국 주식 전문 애널리스트입니다. 다음 종목 데이터를 바탕으로 단기(1~5일) 투자 판단 근거를 3~4문장으로 간결하게 한국어로 설명하세요. 수치 근거 포함, 리스크 언급, 마크다운 사용 금지.\n'
-    + '종목:' + s.name + '(' + s.id + ')/섹터:' + (s.sector||'기타') + '\n'
-    + 'PBR:' + (s.pbr||0) + '/PER:' + (s.per||'N/A') + '/ROE:' + (s.roe||0) + '%\n'
-    + '52주:' + (s.w52||0) + '%/외인:' + (s.foreign||'—') + '/등락:' + (s.chg||0) + '%\n'
-    + '뉴스:' + newsText;
+  var prompt = '다음 한국 상장 종목에 대해 JSON 형식으로만 답하세요. 다른 텍스트 없이 JSON만 출력하세요.\n'
+    + '종목: ' + s.name + ' (' + s.id + '), 섹터: ' + (s.sector||'기타') + ', 시장: ' + (s._market||'KOSPI') + '\n'
+    + 'PBR:' + (s.pbr||0) + ', PER:' + (s.per||'N/A') + ', ROE:' + (s.roe||0) + '%, 52주대비:' + (s.w52||0) + '%, 등락:' + (s.chg||0) + '%\n'
+    + '\n요청 JSON 형식:\n'
+    + '{\n'
+    + '  "intro": "이 회사가 어떤 사업을 하는지 2~3문장으로 설명. 주요 제품/서비스, 주요 고객사나 납품처, 업계 위치 포함",\n'
+    + '  "news": [\n'
+    + '    {"t": "최근 이슈나 뉴스 제목 1", "src": "출처", "time": "최근", "sent": "pos"},\n'
+    + '    {"t": "최근 이슈나 뉴스 제목 2", "src": "출처", "time": "최근", "sent": "neu"},\n'
+    + '    {"t": "리스크 요인 제목", "src": "출처", "time": "최근", "sent": "neg"}\n'
+    + '  ],\n'
+    + '  "analysis": "PBR/PER/ROE/52주 등락/외인수급 기반 단기 투자 판단근거 3~4문장. 리스크 포함",\n'
+    + '  "tags": ["관련태그1", "관련태그2", "관련태그3"]\n'
+    + '}';
 
   // Gemini API 직접 호출 (브라우저에서 CORS 허용)
   var GEMINI_KEY = window.GEMINI_API_KEY || '';
