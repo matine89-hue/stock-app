@@ -285,6 +285,21 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
     <div style="margin-top:8px;font-size:11px;color:var(--text3);">⚠️ 키는 이 기기 브라우저에만 저장됩니다. 타인과 공유하지 마세요.</div>
   </div>
 
+  <!-- Gemini API 키 -->
+  <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">Gemini API 키 (AI 분석용)</div>
+    <div style="margin-bottom:8px;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Google AI Studio API Key</div>
+      <input id="inputGeminiKey" type="password" placeholder="AIza..." style="width:100%;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:monospace;font-size:12px;padding:9px 12px;outline:none;" onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border2)'"/>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="saveGeminiKey()" style="flex:1;padding:10px;background:var(--green-dim);border:0.5px solid var(--green);border-radius:var(--radius-sm);color:var(--green);font-size:13px;font-weight:500;cursor:pointer;">저장</button>
+      <button onclick="clearGeminiKey()" style="padding:10px 14px;background:transparent;border:0.5px solid var(--border2);border-radius:var(--radius-sm);color:var(--text3);font-size:13px;cursor:pointer;">초기화</button>
+    </div>
+    <div id="geminiKeyStatus" style="margin-top:8px;font-size:11px;color:var(--text3);">상태: 확인 중...</div>
+    <div style="margin-top:6px;font-size:11px;color:var(--text3);">aistudio.google.com → Get API key → Create API key</div>
+  </div>
+
   <!-- 실시간 데이터 불러오기 -->
   <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px;">
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">실시간 데이터 새로고침</div>
@@ -380,7 +395,34 @@ function setFetchStatus(color, html) {
 }
 
 // ── API 상태 초기화 ───────────────────────────
+function saveGeminiKey() {
+  var el = document.getElementById('inputGeminiKey');
+  var key = el ? el.value.trim() : '';
+  if (!key) { document.getElementById('geminiKeyStatus').textContent = '키를 입력하세요.'; return; }
+  localStorage.setItem('gk', key);
+  window.GEMINI_API_KEY = key;
+  if (el) el.value = '';
+  document.getElementById('geminiKeyStatus').textContent = '✅ 저장됨 (' + key.slice(0,8) + '...)';
+  for (var k in aiCache) { delete aiCache[k]; }
+}
+
+function clearGeminiKey() {
+  localStorage.removeItem('gk');
+  window.GEMINI_API_KEY = '';
+  document.getElementById('geminiKeyStatus').textContent = '삭제됨';
+}
+
 function initApiStatus() {
+  // Gemini 키 로드
+  var gk = localStorage.getItem('gk') || '';
+  if (gk) {
+    window.GEMINI_API_KEY = gk;
+    var gkEl = document.getElementById('geminiKeyStatus');
+    if (gkEl) gkEl.textContent = '✅ 저장됨 (' + gk.slice(0,8) + '...)';
+  } else {
+    var gkEl2 = document.getElementById('geminiKeyStatus');
+    if (gkEl2) gkEl2.textContent = '미설정 — aistudio.google.com에서 발급';
+  }
   var key   = localStorage.getItem('k') || '';
   var token = localStorage.getItem('t') || '';
   var keyEl = document.getElementById('inputAppKey');
@@ -622,44 +664,28 @@ function fetchLiveData() {
             + (s.w52 !== 0 ? '52주 고가 대비 ' + (s.w52 > 0 ? '+' : '') + s.w52 + '% 수준.' : '');
           s.shortScore = calcScore(s);
           s.midScore   = parseFloat(Math.max(0, Math.min(5, s.shortScore - 0.3 + (s.w52 <= -30 ? 0.3 : 0))).toFixed(1));
-          // localStorage 기반 실제 기록 저장/조회
-          var histKey = 'hist_' + s.id;
-          var savedHist = [];
-          try { savedHist = JSON.parse(localStorage.getItem(histKey) || '[]'); } catch(e2) { savedHist = []; }
-
+          // 5거래일 점수 계산 (현재 재무지표 기반, 오늘 종가만 실제값)
           var today2 = new Date();
-          // 오늘 날짜 키 (주말이면 직전 금요일)
-          var tempDay = new Date(today2);
-          while (tempDay.getDay() === 0 || tempDay.getDay() === 6) { tempDay.setDate(tempDay.getDate()-1); }
-          var todayKey = (tempDay.getMonth()+1) + '/' + tempDay.getDate();
-
-          // 오늘 기록 있으면 업데이트, 없으면 추가
-          var foundToday = false;
-          for (var hi2=0; hi2<savedHist.length; hi2++) {
-            if (savedHist[hi2].d === todayKey) {
-              savedHist[hi2].score = s.shortScore;
-              savedHist[hi2].close = s.price;
-              foundToday = true;
-              break;
+          s.history = [];
+          var cursor2 = new Date(today2);
+          var histDays2 = [];
+          while (histDays2.length < 5) {
+            while (cursor2.getDay() === 0 || cursor2.getDay() === 6) {
+              cursor2.setDate(cursor2.getDate() - 1);
             }
+            histDays2.unshift((cursor2.getMonth()+1) + '/' + cursor2.getDate());
+            cursor2.setDate(cursor2.getDate() - 1);
           }
-          if (!foundToday) {
-            savedHist.push({ d: todayKey, score: s.shortScore, close: s.price, nextClose: null, ret: null });
+          for (var hdi=0; hdi<histDays2.length; hdi++) {
+            var isToday3 = (hdi === histDays2.length - 1);
+            s.history.push({
+              d:         histDays2[hdi],
+              score:     s.shortScore,
+              close:     isToday3 ? s.price : null,
+              nextClose: null,
+              ret:       null
+            });
           }
-          // 전날 nextClose/수익률 채우기
-          for (var hi3=0; hi3<savedHist.length-1; hi3++) {
-            var cur3 = savedHist[hi3];
-            var nxt3 = savedHist[hi3+1];
-            if (cur3.nextClose === null && nxt3.close > 0 && cur3.close > 0) {
-              cur3.nextClose = nxt3.close;
-              var retVal = ((nxt3.close - cur3.close) / cur3.close * 100);
-              cur3.ret = (retVal >= 0 ? '+' : '') + retVal.toFixed(2) + '%';
-            }
-          }
-          // 최근 5개만 유지
-          if (savedHist.length > 5) { savedHist = savedHist.slice(savedHist.length - 5); }
-          localStorage.setItem(histKey, JSON.stringify(savedHist));
-          s.history = savedHist;
         }
         setTimeout(loadNext, 300);
       }).catch(function() { setTimeout(loadNext, 300); });
