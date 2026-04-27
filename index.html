@@ -533,6 +533,25 @@ function fetchStockDetail(stockCode, market) {
   .catch(function() { return null; });
 }
 
+// 일별 시세 (과거 5거래일 종가)
+function fetchDailyPrice(stockCode) {
+  var token     = localStorage.getItem('t') || '';
+  var appkey    = localStorage.getItem('k') || '';
+  var appsecret = localStorage.getItem('s') || '';
+  if (!token || !stockCode) return Promise.resolve([]);
+  return fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'dailyPrice', stockCode: stockCode, token: token, appkey: appkey, appsecret: appsecret })
+  }).then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (!d || !d.output2) return [];
+    // output2: 일별 시세 배열 (최신순), stck_bsop_date=날짜, stck_clpr=종가
+    return d.output2.slice(0, 5).reverse();
+  })
+  .catch(function() { return []; });
+}
+
 // ── 실시간 데이터 불러오기 ───────────────────
 function fetchLiveData() {
   var btn    = document.getElementById('fetchBtn');
@@ -664,9 +683,9 @@ function fetchLiveData() {
             + (s.w52 !== 0 ? '52주 고가 대비 ' + (s.w52 > 0 ? '+' : '') + s.w52 + '% 수준.' : '');
           s.shortScore = calcScore(s);
           s.midScore   = parseFloat(Math.max(0, Math.min(5, s.shortScore - 0.3 + (s.w52 <= -30 ? 0.3 : 0))).toFixed(1));
-          // 5거래일 점수 계산 (현재 재무지표 기반, 오늘 종가만 실제값)
+          // 일별 시세로 실제 종가 채우기 (비동기, 별도 로드)
+          // 일단 오늘 종가만 세팅 (fetchDailyPrice는 loadHistoryForStock에서 처리)
           var today2 = new Date();
-          s.history = [];
           var cursor2 = new Date(today2);
           var histDays2 = [];
           while (histDays2.length < 5) {
@@ -676,16 +695,17 @@ function fetchLiveData() {
             histDays2.unshift((cursor2.getMonth()+1) + '/' + cursor2.getDate());
             cursor2.setDate(cursor2.getDate() - 1);
           }
+          s.history = [];
           for (var hdi=0; hdi<histDays2.length; hdi++) {
             var isToday3 = (hdi === histDays2.length - 1);
             s.history.push({
-              d:         histDays2[hdi],
-              score:     s.shortScore,
-              close:     isToday3 ? s.price : null,
-              nextClose: null,
-              ret:       null
+              d: histDays2[hdi], score: s.shortScore,
+              close: isToday3 ? s.price : null,
+              nextClose: null, ret: null
             });
           }
+          // 실제 과거 종가 비동기 로드
+          loadHistoryForStock(s);
         }
         setTimeout(loadNext, 300);
       }).catch(function() { setTimeout(loadNext, 300); });
@@ -1031,6 +1051,37 @@ function openNoti()   { switchMainTab(4); }
 function closeNoti()  {}
 function toggleNoti(el) { el.classList.toggle('on'); }
 
+// 일별 시세로 점수기록 종가 채우기
+function loadHistoryForStock(s) {
+  if (!s || !s.id) return;
+  fetchDailyPrice(s.id).then(function(days) {
+    if (!days || days.length === 0) return;
+    // days: 오래된순 [{stck_bsop_date:'20250421', stck_clpr:'1601'}, ...]
+    for (var i = 0; i < days.length && i < s.history.length; i++) {
+      var closePrice = parseInt(days[i].stck_clpr || 0);
+      if (closePrice > 0) s.history[i].close = closePrice;
+    }
+    // 수익률 계산
+    for (var j = 0; j < s.history.length - 1; j++) {
+      var cur = s.history[j];
+      var nxt = s.history[j+1];
+      if (cur.close > 0 && nxt.close > 0 && cur.nextClose === null) {
+        cur.nextClose = nxt.close;
+        var rv = ((nxt.close - cur.close) / cur.close * 100);
+        cur.ret = (rv >= 0 ? '+' : '') + rv.toFixed(2) + '%';
+      }
+    }
+    // 기록 탭 열려있으면 DOM 갱신
+    if (expandedId === s.id && (expandedDetailTab[s.id] || 0) === 3) {
+      var card = document.getElementById('card-' + s.id);
+      if (card) {
+        var body = card.querySelector('.detail-body');
+        if (body) body.innerHTML = renderScoreHistory(s);
+      }
+    }
+  });
+}
+
 // ── 종목 클릭 시 현재가+재무 로드 ────────────
 function loadStockDetail(stockId) {
   var all = KOSPI_STOCKS.concat(KOSDAQ_STOCKS);
@@ -1292,7 +1343,7 @@ function loadAiAnalysis(stockId) {
     });
   } else {
     // Gemini 직접 호출
-    fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key=' + GEMINI_KEY, {
+    fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + GEMINI_KEY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
