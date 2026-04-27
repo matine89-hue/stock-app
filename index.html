@@ -132,7 +132,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 .risk-num { font-size: 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600; }
 
 /* AI reason */
-.ai-reason { background: var(--bg3); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: var(--text2); line-height: 1.7; position: relative; }
+.ai-reason { background: var(--bg3); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: var(--text2); line-height: 1.7; position: relative; word-break: break-word; white-space: pre-wrap; }
 .ai-label { font-size: 10px; color: var(--blue); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; font-weight: 500; }
 .ai-loading { display: flex; align-items: center; gap: 6px; color: var(--text3); font-size: 12px; }
 .spinner { width: 12px; height: 12px; border: 1.5px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -1025,22 +1025,38 @@ function toggleExpand(id) {
 function switchDetailTab(e, id, idx) {
   e.stopPropagation();
   expandedDetailTab[id] = idx;
-  renderList();
+
+  // renderList() 대신 탭/바디만 직접 업데이트 (s.news 초기화 방지)
+  var card = document.getElementById('card-' + id);
+  if (!card) { renderList(); return; }
+
+  // 탭 활성화 표시 변경
+  var dtabs = card.querySelectorAll('.dtab');
+  for (var ti=0; ti<dtabs.length; ti++) {
+    dtabs[ti].classList.toggle('active', ti === idx);
+  }
+
+  // 바디 내용 교체
+  var body = card.querySelector('.detail-body');
+  if (!body) { renderList(); return; }
+
+  // 해당 종목 찾기
+  var all2 = KOSPI_STOCKS.concat(KOSDAQ_STOCKS);
+  var s2 = null;
+  for (var i=0; i<all2.length; i++) {
+    if (all2[i].id === id) { s2 = all2[i]; break; }
+  }
+  if (!s2) { renderList(); return; }
+
   if (idx === 0) {
+    body.innerHTML = renderAnalysis(s2);
     setTimeout(function(){ loadAiAnalysis(id); }, 100);
   } else if (idx === 1) {
-    // 뉴스 탭: s.news가 이미 있으면 즉시 렌더링
-    var all2 = KOSPI_STOCKS.concat(KOSDAQ_STOCKS);
-    for (var i=0; i<all2.length; i++) {
-      if (all2[i].id === id && all2[i].news && all2[i].news.length > 0) {
-        var card2 = document.getElementById('card-' + id);
-        if (card2) {
-          var body2 = card2.querySelector('.detail-body');
-          if (body2) body2.innerHTML = renderNews(all2[i]);
-        }
-        break;
-      }
-    }
+    body.innerHTML = renderNews(s2);
+  } else if (idx === 2) {
+    body.innerHTML = renderMemo(s2);
+  } else if (idx === 3) {
+    body.innerHTML = renderScoreHistory(s2);
   }
 }
 
