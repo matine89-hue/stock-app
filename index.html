@@ -1237,19 +1237,25 @@ function handleAiResponse(data, stockId) {
     return;
   }
   var rawText = data.candidates[0].content.parts[0].text || '';
-  // JSON 파싱 시도
+  // JSON 파싱 시도 — Gemini가 마크다운으로 감싸는 경우 처리
   var parsed = null;
   try {
-    // JSON 블록 추출 (백틱 없이 처리)
     var jsonStr = rawText.trim();
-    var jsonStart = jsonStr.indexOf('{');
-    var jsonEnd   = jsonStr.lastIndexOf('}');
-    if (jsonStart >= 0 && jsonEnd > jsonStart) {
-      jsonStr = jsonStr.slice(jsonStart, jsonEnd+1);
+    // 방법1: 중괄호 기준 JSON 추출
+    var fenceStart = jsonStr.indexOf('{');
+    var fenceEnd   = jsonStr.lastIndexOf('}');
+    if (fenceStart >= 0 && fenceEnd > fenceStart) {
+      jsonStr = jsonStr.slice(fenceStart, fenceEnd + 1);
     }
+    // 혹시 남은 제어문자 제거
+    jsonStr = jsonStr.replace(/[\u0000-\u001F\u007F]/g, function(ch) {
+      // 탭/줄바꿈은 허용
+      if (ch === '\t' || ch === '\n' || ch === '\r') return ch;
+      return '';
+    });
     parsed = JSON.parse(jsonStr);
   } catch(e) {
-    // JSON 파싱 실패 시 텍스트 그대로 표시
+    // JSON 파싱 실패: analysis 키 없이 텍스트만 표시
     aiCache[stockId] = rawText;
     if (el2) el2.textContent = rawText;
     return;
@@ -1306,7 +1312,7 @@ function loadAiAnalysis(stockId) {
     for (var j = 0; j < s.news.length; j++) nts.push(s.news[j].t);
     newsText = nts.join(' | ');
   }
-  var prompt = '다음 한국 상장 종목에 대해 JSON 형식으로만 답하세요. 다른 텍스트 없이 JSON만 출력하세요.\n'
+  var prompt = '다음 한국 상장 종목에 대해 JSON 형식으로만 답하세요. 마크다운 없이 순수 JSON 텍스트만 출력하세요. 설명 텍스트 없이 { 로 시작하고 } 로 끝내세요.\n'
     + '종목: ' + s.name + ' (' + s.id + '), 섹터: ' + (s.sector||'기타') + ', 시장: ' + (s._market||'KOSPI') + '\n'
     + 'PBR:' + (s.pbr||0) + ', PER:' + (s.per||'N/A') + ', ROE:' + (s.roe||0) + '%, 52주대비:' + (s.w52||0) + '%, 등락:' + (s.chg||0) + '%\n'
     + '\n요청 JSON 형식:\n'
