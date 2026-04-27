@@ -1056,10 +1056,33 @@ function loadHistoryForStock(s) {
   if (!s || !s.id) return;
   fetchDailyPrice(s.id).then(function(days) {
     if (!days || days.length === 0) return;
-    // days: 오래된순 [{stck_bsop_date:'20250421', stck_clpr:'1601'}, ...]
+    // 종가 채우기
     for (var i = 0; i < days.length && i < s.history.length; i++) {
       var closePrice = parseInt(days[i].stck_clpr || 0);
       if (closePrice > 0) s.history[i].close = closePrice;
+    }
+    // 날짜별 점수 재계산 (등락률 반영)
+    for (var k = 0; k < s.history.length; k++) {
+      var h = s.history[k];
+      if (h.close <= 0) continue;
+      // 전일 종가 대비 등락률 계산
+      var dayChg = 0;
+      if (k > 0 && s.history[k-1].close > 0) {
+        dayChg = parseFloat(((h.close - s.history[k-1].close) / s.history[k-1].close * 100).toFixed(2));
+      } else if (k === 0 && days.length > s.history.length) {
+        // 첫날은 그 이전 날 종가가 있으면 계산
+        var prevClose0 = parseInt((days[days.length - s.history.length - 1] || {}).stck_clpr || 0);
+        if (prevClose0 > 0) dayChg = parseFloat(((h.close - prevClose0) / prevClose0 * 100).toFixed(2));
+      }
+      // 등락률로 점수 보정 (기본 점수 s.shortScore 기준)
+      var adjScore = s.shortScore;
+      if (dayChg >= 10) adjScore += 0.8;
+      else if (dayChg >= 5) adjScore += 0.5;
+      else if (dayChg >= 2) adjScore += 0.3;
+      else if (dayChg <= -10) adjScore -= 0.8;
+      else if (dayChg <= -5) adjScore -= 0.5;
+      else if (dayChg <= -2) adjScore -= 0.3;
+      h.score = parseFloat(Math.max(0, Math.min(5, adjScore)).toFixed(1));
     }
     // 수익률 계산
     for (var j = 0; j < s.history.length - 1; j++) {
@@ -1237,25 +1260,18 @@ function handleAiResponse(data, stockId) {
     return;
   }
   var rawText = data.candidates[0].content.parts[0].text || '';
-  // JSON 파싱 시도 — Gemini가 마크다운으로 감싸는 경우 처리
   var parsed = null;
   try {
     var jsonStr = rawText.trim();
-    // 방법1: 중괄호 기준 JSON 추출
-    var fenceStart = jsonStr.indexOf('{');
-    var fenceEnd   = jsonStr.lastIndexOf('}');
-    if (fenceStart >= 0 && fenceEnd > fenceStart) {
-      jsonStr = jsonStr.slice(fenceStart, fenceEnd + 1);
+    // 중괄호 기준 JSON 추출 (마크다운 감싸기 제거)
+    var fs = jsonStr.indexOf('{');
+    var fe = jsonStr.lastIndexOf('}');
+    if (fs >= 0 && fe > fs) {
+      jsonStr = jsonStr.slice(fs, fe + 1);
     }
-    // 혹시 남은 제어문자 제거
-    jsonStr = jsonStr.replace(/[\u0000-\u001F\u007F]/g, function(ch) {
-      // 탭/줄바꿈은 허용
-      if (ch === '\t' || ch === '\n' || ch === '\r') return ch;
-      return '';
-    });
     parsed = JSON.parse(jsonStr);
   } catch(e) {
-    // JSON 파싱 실패: analysis 키 없이 텍스트만 표시
+    // 파싱 실패: 텍스트 그대로 표시
     aiCache[stockId] = rawText;
     if (el2) el2.textContent = rawText;
     return;
