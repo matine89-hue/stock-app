@@ -1271,9 +1271,9 @@ function handleAiResponse(data, stockId) {
     }
     parsed = JSON.parse(jsonStr);
   } catch(e) {
-    // 파싱 실패: 텍스트 그대로 표시
+    // 파싱 실패: 텍스트 앞부분 표시 (진단용)
     aiCache[stockId] = rawText;
-    if (el2) el2.textContent = rawText;
+    if (el2) el2.textContent = '[JSON파싱실패] ' + rawText.slice(0, 200);
     return;
   }
   // 종목 데이터 업데이트
@@ -1328,7 +1328,7 @@ function loadAiAnalysis(stockId) {
     for (var j = 0; j < s.news.length; j++) nts.push(s.news[j].t);
     newsText = nts.join(' | ');
   }
-  var prompt = '다음 한국 상장 종목에 대해 JSON 형식으로만 답하세요. 마크다운 없이 순수 JSON 텍스트만 출력하세요. 설명 텍스트 없이 { 로 시작하고 } 로 끝내세요.\n'
+  var prompt = '반드시 { 로 시작하고 } 로 끝나는 JSON만 출력하세요. 마크다운, 코드블록, 설명 텍스트 절대 금지. 다음 형식을 정확히 따르세요: {"intro":"...","news":[{"t":"...","src":"...","time":"최근","sent":"pos"},{"t":"...","src":"...","time":"최근","sent":"neu"},{"t":"...","src":"...","time":"최근","sent":"neg"}],"analysis":"...","tags":["...","...","..."]}\n'
     + '종목: ' + s.name + ' (' + s.id + '), 섹터: ' + (s.sector||'기타') + ', 시장: ' + (s._market||'KOSPI') + '\n'
     + 'PBR:' + (s.pbr||0) + ', PER:' + (s.per||'N/A') + ', ROE:' + (s.roe||0) + '%, 52주대비:' + (s.w52||0) + '%, 등락:' + (s.chg||0) + '%\n'
     + '\n요청 JSON 형식:\n'
@@ -1370,7 +1370,7 @@ function loadAiAnalysis(stockId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 400, temperature: 0.7 }
+        generationConfig: { maxOutputTokens: 1500, temperature: 0.7 }
       })
     }).then(function(r) { return r.json(); })
     .then(function(data) { handleAiResponse(data, stockId); })
