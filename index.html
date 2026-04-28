@@ -1364,20 +1364,10 @@ function loadAiAnalysis(stockId) {
     for (var j = 0; j < s.news.length; j++) nts.push(s.news[j].t);
     newsText = nts.join(' | ');
   }
-  var prompt = '반드시 { 로 시작하고 } 로 끝나는 JSON만 출력하세요. 마크다운, 코드블록, 설명 텍스트 절대 금지. 다음 형식을 정확히 따르세요: {"intro":"...","news":[{"t":"...","src":"...","time":"최근","sent":"pos"},{"t":"...","src":"...","time":"최근","sent":"neu"},{"t":"...","src":"...","time":"최근","sent":"neg"}],"analysis":"...","tags":["...","...","..."]}\n'
-    + '종목: ' + s.name + ' (' + s.id + '), 섹터: ' + (s.sector||'기타') + ', 시장: ' + (s._market||'KOSPI') + '\n'
-    + 'PBR:' + (s.pbr||0) + ', PER:' + (s.per||'N/A') + ', ROE:' + (s.roe||0) + '%, 52주대비:' + (s.w52||0) + '%, 등락:' + (s.chg||0) + '%\n'
-    + '\n요청 JSON 형식:\n'
-    + '{\n'
-    + '  "intro": "이 회사가 어떤 사업을 하는지 2~3문장으로 설명. 주요 제품/서비스, 주요 고객사나 납품처, 업계 위치 포함",\n'
-    + '  "news": [\n'
-    + '    {"t": "최근 이슈나 뉴스 제목 1", "src": "출처", "time": "최근", "sent": "pos"},\n'
-    + '    {"t": "최근 이슈나 뉴스 제목 2", "src": "출처", "time": "최근", "sent": "neu"},\n'
-    + '    {"t": "리스크 요인 제목", "src": "출처", "time": "최근", "sent": "neg"}\n'
-    + '  ],\n'
-    + '  "analysis": "PBR/PER/ROE/52주 등락/외인수급 기반 단기 투자 판단근거 3~4문장. 리스크 포함",\n'
-    + '  "tags": ["관련태그1", "관련태그2", "관련태그3"]\n'
-    + '}';
+  var prompt = 'JSON만 출력. { 로 시작 } 로 끝. 마크다운 금지.\n'
+    + '종목:' + s.name + '(' + s.id + ') ' + (s._market||'KOSPI') + ' ' + (s.sector||'기타') + '\n'
+    + 'PBR:' + (s.pbr||0) + ' PER:' + (s.per||'N/A') + ' ROE:' + (s.roe||0) + '% 52주:' + (s.w52||0) + '% 등락:' + (s.chg||0) + '%\n'
+    + '형식:{"intro":"회사사업설명2문장","news":[{"t":"뉴스1","src":"출처","time":"최근","sent":"pos"},{"t":"뉴스2","src":"출처","time":"최근","sent":"neu"},{"t":"뉴스3","src":"출처","time":"최근","sent":"neg"}],"analysis":"투자판단3문장","tags":["태그1","태그2","태그3"]}';
 
   // Gemini API 직접 호출 (브라우저에서 CORS 허용)
   var GEMINI_KEY = window.GEMINI_API_KEY || '';
@@ -1406,7 +1396,7 @@ function loadAiAnalysis(stockId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1500, temperature: 0.7 }
+        generationConfig: { maxOutputTokens: 800, temperature: 0.7 }
       })
     }).then(function(r) { return r.json(); })
     .then(function(data) { handleAiResponse(data, stockId); })
