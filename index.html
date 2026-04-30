@@ -1256,9 +1256,12 @@ function toggleExpand(id) {
     setTimeout(function() {
       var card = document.getElementById('card-' + id);
       if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      loadAiAnalysis(id);
       loadStockDetail(id);
     }, 100);
+    // AI 호출은 2초 지연 (재무지표 로딩 완료 + Quota 여유 확보)
+    setTimeout(function() {
+      loadAiAnalysis(id);
+    }, 2000);
   }
 }
 
@@ -1619,37 +1622,72 @@ function loadAiAnalysis(stockId) {
   var GEMINI_KEY = window.GEMINI_API_KEY || '';
   if (!GEMINI_KEY) {
     // 프록시 경유 (GEMINI_KEY 없을 때)
-    fetch(PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'aiAnalysis',
-        prompt: prompt,
-        appkey: localStorage.getItem('k') || '',
-        appsecret: localStorage.getItem('s') || '',
-        token: localStorage.getItem('t') || ''
-      })
-    }).then(function(r) { return r.json(); })
-    .then(function(data) { handleAiResponse(data, stockId); })
-    .catch(function(err) {
+    function doAiCall(retryCount) {
       var el2 = document.getElementById('ai-text-' + stockId);
-      if (el2) el2.textContent = '분석 오류: ' + err.message;
-    });
+      if (!el2) return;
+      if (retryCount > 0) el2.textContent = '🔄 재시도 중... (' + retryCount + '/2)';
+      fetch(PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'aiAnalysis',
+          prompt: prompt,
+          appkey: localStorage.getItem('k') || '',
+          appsecret: localStorage.getItem('s') || '',
+          token: localStorage.getItem('t') || ''
+        })
+      }).then(function(r) { return r.json(); })
+      .then(function(data) {
+        // Quota 초과면 재시도
+        if (data.error) {
+          var errStr = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+          if ((errStr.indexOf('quota') >= 0 || errStr.indexOf('Quota') >= 0 || errStr.indexOf('RESOURCE_EXHAUSTED') >= 0) && retryCount < 2) {
+            var el3 = document.getElementById('ai-text-' + stockId);
+            if (el3) el3.textContent = '⏳ 한도 초과 — ' + (5 + retryCount * 5) + '초 후 재시도...';
+            setTimeout(function() { doAiCall(retryCount + 1); }, (5 + retryCount * 5) * 1000);
+            return;
+          }
+        }
+        handleAiResponse(data, stockId);
+      })
+      .catch(function(err) {
+        var el2b = document.getElementById('ai-text-' + stockId);
+        if (el2b) el2b.textContent = '분석 오류: ' + err.message;
+      });
+    }
+    doAiCall(0);
   } else {
     // Gemini 직접 호출
-    fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + GEMINI_KEY, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 800, temperature: 0.7 }
+    function doGeminiCall(retryCount) {
+      var el2r = document.getElementById('ai-text-' + stockId);
+      if (!el2r) return;
+      if (retryCount > 0) el2r.textContent = '🔄 재시도 중... (' + retryCount + '/2)';
+      fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + GEMINI_KEY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 800, temperature: 0.7 }
+        })
+      }).then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.error) {
+          var es = JSON.stringify(data.error);
+          if ((es.indexOf('quota') >= 0 || es.indexOf('RESOURCE_EXHAUSTED') >= 0) && retryCount < 2) {
+            var el3r = document.getElementById('ai-text-' + stockId);
+            if (el3r) el3r.textContent = '⏳ 한도 초과 — ' + (5 + retryCount * 5) + '초 후 재시도...';
+            setTimeout(function() { doGeminiCall(retryCount + 1); }, (5 + retryCount * 5) * 1000);
+            return;
+          }
+        }
+        handleAiResponse(data, stockId);
       })
-    }).then(function(r) { return r.json(); })
-    .then(function(data) { handleAiResponse(data, stockId); })
-    .catch(function(err) {
-      var el2 = document.getElementById('ai-text-' + stockId);
-      if (el2) el2.textContent = '분석 오류: ' + err.message;
-    });
+      .catch(function(err) {
+        var el2b = document.getElementById('ai-text-' + stockId);
+        if (el2b) el2b.textContent = '분석 오류: ' + err.message;
+      });
+    }
+    doGeminiCall(0);
   }
 }
 
