@@ -247,6 +247,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
   <div class="filter-row" id="filterRow">
     <div class="filter-chip active" onclick="setFilter('all',this)">전체</div>
     <div class="filter-chip" onclick="setFilter('high',this)">추천 4점↑</div>
+    <div class="filter-chip" onclick="setFilter('pullback',this)">눌림목 📉</div>
     <div class="filter-chip" onclick="setFilter('drop',this)">낙폭과대</div>
     <div class="filter-chip" onclick="setFilter('pbr',this)">PBR 저평가</div>
     <div class="filter-chip" onclick="setFilter('foreign',this)">외인매수</div>
@@ -1046,6 +1047,7 @@ function tagColor(t) {
 function applyFilter(stocks) {
   if (currentFilter === 'all') return stocks;
   if (currentFilter === 'high') return stocks.filter(function(s){ return s.shortScore >= 4; });
+  if (currentFilter === 'pullback') return stocks.filter(function(s){ return s._pullback === true; });
   if (currentFilter === 'drop') return stocks.filter(function(s){ return s.w52 <= -30; });
   if (currentFilter === 'pbr')  return stocks.filter(function(s){ return s.pbr > 0 && s.pbr < 1; });
   if (currentFilter === 'foreign') return stocks.filter(function(s){ return s.foreign && s.foreign.indexOf('+') === 0; });
@@ -1152,6 +1154,10 @@ function renderAnalysis(s) {
     + '<div class="risk-score"><div class="risk-dots">';
   for (var j=1;j<=5;j++) html += '<div class="rdot ' + (j<=Math.round(s.midScore)?'fill-mid':'empty-r') + '"></div>';
   html += '</div><span class="risk-num" style="color:var(--amber)">' + s.midScore.toFixed(1) + '</span></div></div></div>';
+  if (s._pullback && s._pullbackDesc) {
+    html += '<div style="background:rgba(255,184,74,0.1);border:0.5px solid rgba(255,184,74,0.4);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--amber);">'
+      + s._pullbackDesc + '</div>';
+  }
   html += '<div class="ai-reason"><div class="ai-label">🤖 AI 분석 판단근거</div>'
     + '<div id="ai-text-' + s.id + '"><div class="ai-loading"><div class="spinner"></div> 분석 준비 중...</div></div></div>';
   if (s.tags && s.tags.length > 0) {
@@ -1368,12 +1374,63 @@ function loadHistoryForStock(s) {
         cur.ret = (rv >= 0 ? '+' : '') + rv.toFixed(2) + '%';
       }
     }
+    // 눌림목 판단
+    // 조건: 전전일 거래량 > 전일 거래량 * 1.3 (전전일 거래량 급증)
+    //       전전일 종가 > 전전전일 종가 (전전일 상승)
+    //       전일 거래량 < 전전일 거래량 * 0.7 (전일 거래량 감소 = 눌림)
+    //       오늘 종가 < 전일 종가 OR 오늘 등락 < 0 (오늘 소폭 눌림)
+    s._pullback = false;
+    s._pullbackDesc = '';
+    if (days.length >= 3) {
+      var d0 = days[days.length - 1]; // 오늘(최신)
+      var d1 = days[days.length - 2]; // 전일
+      var d2 = days[days.length - 3]; // 전전일
+      var vol0 = parseInt(d0.acml_vol || 0);
+      var vol1 = parseInt(d1.acml_vol || 0);
+      var vol2 = days.length >= 4 ? parseInt(days[days.length - 4].acml_vol || 0) : 0;
+      var close0 = parseInt(d0.stck_clpr || 0);
+      var close1 = parseInt(d1.stck_clpr || 0);
+      var close2 = parseInt(d2.stck_clpr || 0);
+      var close3 = days.length >= 4 ? parseInt(days[days.length - 4].stck_clpr || 0) : 0;
+
+      // 전일: 거래량 급증 + 상승
+      var prevSurge  = vol1 > 0 && vol2 > 0 && vol1 > vol2 * 1.3 && close1 > close2;
+      // 오늘: 거래량 감소 + 소폭 하락/보합 (눌림)
+      var todayPull  = vol0 > 0 && vol1 > 0 && vol0 < vol1 * 0.8 && close0 <= close1 * 1.01;
+
+      if (prevSurge && todayPull) {
+        s._pullback = true;
+        s._pullbackDesc = '📉 눌림목 — 전일 거래량 급증+상승 후 오늘 거래량 감소+눌림. 거래량 회복 시 진입 검토';
+        // 눌림목 종목은 점수 +0.3 보정
+        s.shortScore = parseFloat(Math.min(5, s.shortScore + 0.3).toFixed(1));
+      }
+    }
+
     // 기록 탭 열려있으면 DOM 갱신
     if (expandedId === s.id && (expandedDetailTab[s.id] || 0) === 3) {
       var card = document.getElementById('card-' + s.id);
       if (card) {
         var body = card.querySelector('.detail-body');
         if (body) body.innerHTML = renderScoreHistory(s);
+      }
+    }
+    // 눌림목 태그/점수 DOM 갱신
+    if (s._pullback) {
+      var cardPb = document.getElementById('card-' + s.id);
+      if (cardPb) {
+        var tagsEl = cardPb.querySelector('.tags');
+        if (tagsEl && tagsEl.innerHTML.indexOf('눌림목') < 0) {
+          tagsEl.innerHTML += '<span class="tag tag-amber">눌림목</span>';
+        }
+        // 점수 도트 업데이트
+        var scoreRows = cardPb.querySelectorAll('.score-row');
+        if (scoreRows.length > 0) {
+          var filled = Math.round(s.shortScore);
+          var dotHtml = '';
+          for (var ddi=1;ddi<=5;ddi++) dotHtml += '<div class="sdot '+(ddi<=filled?'fill':'empty')+'"></div>';
+          dotHtml += '<span class="score-num">'+s.shortScore.toFixed(1)+'</span>';
+          scoreRows[0].innerHTML = dotHtml;
+        }
       }
     }
   });
