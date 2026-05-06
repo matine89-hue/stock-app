@@ -112,6 +112,25 @@ export default async function handler(req, res) {
       return res.status(r.status).json(d);
     }
 
+    // ── 5. 30분봉 조회 (상승장악형 감지용)
+    if (action === 'candleChart') {
+      const now = new Date();
+      const pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+      const timeStr = pad(now.getHours()) + pad(now.getMinutes()) + '00';
+      const p = new URLSearchParams({
+        FID_ETC_CLS_CODE:        '',
+        FID_COND_MRKT_DIV_CODE:  'J',
+        FID_INPUT_ISCD:          stockCode,
+        FID_INPUT_HOUR_1:        timeStr,
+        FID_PW_DATA_INCU_YN:     'Y',
+      });
+      const r = await fetch(
+        KIS + '/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice?' + p.toString(),
+        { method: 'GET', headers: kisHeader('FHKST03010200') }
+      );
+      return res.status(r.status).json(await r.json());
+    }
+
     return res.status(400).json({ error: 'Unknown action: ' + action });
 
   } catch (err) {
