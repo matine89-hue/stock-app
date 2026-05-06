@@ -240,6 +240,7 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
       <div class="tab" id="tab1" onclick="switchMainTab(1)">📈 코스닥</div>
       <div class="tab" id="tab2" onclick="switchMainTab(2)">⭐ 관심</div>
       <div class="tab" id="tab3" onclick="switchMainTab(3)">📋 기록</div>
+      <div class="tab" id="tab5" onclick="switchMainTab(5)">👁 감시</div>
     </div>
   </div>
 
@@ -256,6 +257,28 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
 
   <!-- Stock list -->
   <div class="stock-list" id="stockList"></div>
+
+  <!-- 감시 패널 -->
+  <div id="watchPanel" style="display:none;padding:16px;flex:1;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div>
+        <div style="font-size:14px;font-weight:700;">상승장악형 감시</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">30분봉 기준 · 장중(09:00~15:30)에만 유효</div>
+      </div>
+      <button onclick="startWatchScan()" id="scanBtn"
+        style="padding:8px 14px;background:var(--blue-dim);border:0.5px solid var(--blue);border-radius:var(--radius-sm);color:var(--blue);font-size:13px;font-weight:500;cursor:pointer;">
+        🔍 감시 시작
+      </button>
+    </div>
+    <div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.6;">
+      <strong style="color:var(--blue);">감지 패턴</strong><br>
+      📍 <strong>음봉→양봉</strong>: 직전 음봉을 현재 양봉이 완전 장악<br>
+      📍 <strong>양봉→음봉→양봉</strong>: 조정 후 재상승 장악<br>
+      📍 <strong>+ 거래량 급증</strong>: 직전 30분봉 대비 2배 이상
+    </div>
+    <div id="scanStatus" style="font-size:12px;color:var(--text3);margin-bottom:10px;"></div>
+    <div id="scanResults"></div>
+  </div>
 
   <div id="settingsPanel" style="display:none;padding:16px;flex:1;overflow-y:auto;">
 
@@ -382,7 +405,11 @@ body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: va
     </div>
     <div class="nav-item" id="nav3" onclick="switchMainTab(3)">
       <div class="nav-icon">📋</div>
-      <div class="nav-label">점수기록</div>
+      <div class="nav-label">기록</div>
+    </div>
+    <div class="nav-item" id="nav5" onclick="switchMainTab(5)">
+      <div class="nav-icon">👁</div>
+      <div class="nav-label">감시</div>
     </div>
     <div class="nav-item" id="nav4" onclick="switchMainTab(4)">
       <div class="nav-icon">⚙️</div>
@@ -644,6 +671,161 @@ function searchStock() {
       }).catch(function(e) { var ab = document.getElementById('searchAiBox'); if(ab) ab.textContent = '오류: ' + e.message; });
     }
   }).catch(function(e) { resultEl.innerHTML = '<span style="color:var(--red)">오류: ' + e.message + '</span>'; });
+}
+
+// ── 30분봉 조회 ──────────────────────────────
+function fetchCandleChart(stockCode) {
+  var token     = localStorage.getItem('t') || '';
+  var appkey    = localStorage.getItem('k') || '';
+  var appsecret = localStorage.getItem('s') || '';
+  if (!token || !stockCode) return Promise.resolve(null);
+  return fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'candleChart', stockCode: stockCode, token: token, appkey: appkey, appsecret: appsecret })
+  }).then(function(r) { return r.json(); })
+  .then(function(d) { return (d && d.output2) ? d.output2 : null; })
+  .catch(function() { return null; });
+}
+
+// ── 상승장악형 패턴 감지 ──────────────────────
+function detectEngulfing(candles) {
+  // candles: 최신순 배열
+  // stck_oprc=시가, stck_hgpr=고가, stck_lwpr=저가, stck_prpr=현재가/종가, acml_vol=거래량
+  if (!candles || candles.length < 3) return null;
+
+  var result = null;
+
+  // 최근 3개 캔들
+  var c0 = candles[0]; // 현재(최신)
+  var c1 = candles[1]; // 직전
+  var c2 = candles[2]; // 그 전
+
+  var o0 = parseInt(c0.stck_oprc||0), h0 = parseInt(c0.stck_hgpr||0);
+  var l0 = parseInt(c0.stck_lwpr||0), cl0 = parseInt(c0.stck_prpr||0);
+  var o1 = parseInt(c1.stck_oprc||0), h1 = parseInt(c1.stck_hgpr||0);
+  var l1 = parseInt(c1.stck_lwpr||0), cl1 = parseInt(c1.stck_prpr||0);
+  var o2 = parseInt(c2.stck_oprc||0), cl2 = parseInt(c2.stck_prpr||0);
+  var v0 = parseInt(c0.acml_vol||0);
+  var v1 = parseInt(c1.acml_vol||0);
+  var v2 = parseInt(c2.acml_vol||0);
+
+  var isBull0 = cl0 > o0; // 현재 양봉
+  var isBear0 = cl0 < o0; // 현재 음봉
+  var isBull1 = cl1 > o1; // 직전 양봉
+  var isBear1 = cl1 < o1; // 직전 음봉
+  var isBull2 = cl2 > o2;
+
+  // 거래량 급증: 현재봉이 직전봉 대비 1.8배 이상
+  var volSurge = v1 > 0 && v0 >= v1 * 1.8;
+
+  // 패턴1: 음봉→양봉 장악 (Bullish Engulfing)
+  // 현재 양봉, 직전 음봉, 현재 시가 <= 직전 종가, 현재 종가 >= 직전 시가
+  if (isBull0 && isBear1 && o0 <= cl1 && cl0 >= o1) {
+    result = {
+      pattern: '음봉→양봉 상승장악',
+      desc: '직전 음봉을 현재 양봉이 완전 장악',
+      volSurge: volSurge,
+      strength: volSurge ? '강력' : '보통'
+    };
+  }
+
+  // 패턴2: 양봉→음봉→양봉 (Three Inside Up 유사)
+  // 직전직전 양봉, 직전 음봉(직전직전 범위 내), 현재 양봉(직전직전 고가 돌파)
+  if (!result && isBull2 && isBear1 && isBull0) {
+    var innerBear = o1 <= cl2 && cl1 >= o2; // 직전 음봉이 직전직전 양봉 범위 내
+    var finalBull = cl0 >= h1;              // 현재 양봉이 직전 음봉 고가 돌파
+    if (innerBear && finalBull) {
+      result = {
+        pattern: '양봉→음봉→양봉 상승장악',
+        desc: '조정 후 재상승, 직전 음봉 완전 돌파',
+        volSurge: volSurge,
+        strength: volSurge ? '강력' : '보통'
+      };
+    }
+  }
+
+  return result;
+}
+
+// ── 감시 스캔 실행 ────────────────────────────
+function startWatchScan() {
+  var btn = document.getElementById('scanBtn');
+  var status = document.getElementById('scanStatus');
+  var results = document.getElementById('scanResults');
+  if (!btn || !status || !results) return;
+
+  var token = localStorage.getItem('t') || '';
+  if (!token) {
+    status.textContent = '⚠️ 먼저 설정에서 토큰 발급을 해주세요.';
+    return;
+  }
+
+  var now = new Date();
+  var h = now.getHours();
+  var m = now.getMinutes();
+  if (h < 9 || h > 15 || (h === 15 && m > 30)) {
+    status.innerHTML = '⚠️ 장중(09:00~15:30)에만 유효해요.<br>현재 시간: ' + h + ':' + (m<10?'0':'') + m;
+  }
+
+  btn.textContent = '🔍 스캔 중...';
+  btn.disabled = true;
+  results.innerHTML = '';
+  status.textContent = '분석 중... (종목당 0.5초 소요)';
+
+  var allStocks = KOSPI_STOCKS.concat(KOSDAQ_STOCKS);
+  if (allStocks.length === 0) {
+    status.textContent = '⚠️ 먼저 실시간 데이터를 불러오세요.';
+    btn.textContent = '🔍 감시 시작'; btn.disabled = false;
+    return;
+  }
+
+  var found = [];
+  var idx = 0;
+
+  function scanNext() {
+    if (idx >= allStocks.length) {
+      btn.textContent = '🔍 감시 시작'; btn.disabled = false;
+      if (found.length === 0) {
+        status.textContent = '감지된 패턴 없음 — 장중에 다시 시도해보세요.';
+        results.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px;">현재 상승장악형 패턴 없음</div>';
+      } else {
+        status.textContent = found.length + '개 종목 감지됨';
+        var html2 = '';
+        for (var fi=0; fi<found.length; fi++) {
+          var f = found[fi];
+          var strengthColor = f.pattern_result.strength === '강력' ? 'var(--red)' : 'var(--amber)';
+          html2 += '<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;">'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+            + '<div><span style="font-weight:700;font-size:14px;">' + f.name + '</span>'
+            + '<span style="font-size:11px;color:var(--text3);margin-left:6px;">' + f.id + '</span></div>'
+            + '<span style="font-size:13px;font-weight:600;color:' + strengthColor + ';">' + f.pattern_result.strength + '</span>'
+            + '</div>'
+            + '<div style="font-size:12px;color:var(--blue);margin-bottom:4px;">📍 ' + f.pattern_result.pattern + '</div>'
+            + '<div style="font-size:11px;color:var(--text2);">' + f.pattern_result.desc
+            + (f.pattern_result.volSurge ? ' · <span style="color:var(--red);">거래량 급증 ✅</span>' : ' · 거래량 보통') + '</div>'
+            + '<div style="font-size:11px;color:var(--text3);margin-top:4px;">현재가: ' + (f.price||0).toLocaleString() + '원 · 점수: ' + f.shortScore + '점</div>'
+            + '</div>';
+        }
+        results.innerHTML = html2;
+      }
+      return;
+    }
+
+    var s = allStocks[idx];
+    idx++;
+    status.textContent = '스캔 중... (' + idx + '/' + allStocks.length + ') ' + s.name;
+
+    fetchCandleChart(s.id).then(function(candles) {
+      var pattern = detectEngulfing(candles);
+      if (pattern) {
+        found.push({ id: s.id, name: s.name, price: s.price, shortScore: s.shortScore, pattern_result: pattern });
+      }
+      setTimeout(scanNext, 500);
+    }).catch(function() { setTimeout(scanNext, 500); });
+  }
+
+  scanNext();
 }
 
 function initApiStatus() {
@@ -989,7 +1171,7 @@ function switchMainTab(idx) {
   for (var i = 0; i < tabs.length; i++) {
     tabs[i].classList.toggle('active', i === idx);
   }
-  var navIds = [0,2,3,4];
+  var navIds = [0,2,3,4,5];
   for (var j = 0; j < navIds.length; j++) {
     var el = document.getElementById('nav' + navIds[j]);
     if (el) el.classList.toggle('active', navIds[j] === idx);
@@ -997,12 +1179,19 @@ function switchMainTab(idx) {
   document.getElementById('filterRow').style.display = (idx <= 1) ? 'flex' : 'none';
   var sp = document.getElementById('settingsPanel');
   var sl = document.getElementById('stockList');
+  var wp = document.getElementById('watchPanel');
   if (idx === 4) {
     if (sp) sp.style.display = 'block';
+    if (wp) wp.style.display = 'none';
     if (sl) sl.style.display = 'none';
     initApiStatus();
+  } else if (idx === 5) {
+    if (sp) sp.style.display = 'none';
+    if (wp) wp.style.display = 'block';
+    if (sl) sl.style.display = 'none';
   } else {
     if (sp) sp.style.display = 'none';
+    if (wp) wp.style.display = 'none';
     if (sl) sl.style.display = 'block';
     renderList();
   }
